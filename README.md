@@ -123,13 +123,6 @@ Explore complete examples in [`docs/examples/`](docs/examples/):
 - **[Security](SECURITY.md)** - Security implementation
 - **[Contributing](CONTRIBUTING.md)** - Development guidelines
 
-## Current Limitations
-
-- ❌ No import/multi-file support (grammars must be self-contained)
-- ❌ No file system access (grammars passed as strings)
-- ❌ Java target only for parser generation
-- ⚠️ Large outputs truncated at 50KB
-
 See [PROJECT_DETAILS.md](PROJECT_DETAILS.md) for roadmap and planned features.
 
 ## Security
