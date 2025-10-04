@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: antlr4-mcp-server-test
+
+logging:
+  level:
+    root: INFO
+    com.github.sshailabh.antlr4mcp: DEBUG
+
+antlr:
+  jar-path: /app/libs/antlr-4.13.2-complete.jar
+  max-grammar-size-mb: 10
+  max-input-size-mb: 1
+  max-response-size-kb: 50
+  compilation-timeout-seconds: 30
+  security:
+    enabled: true
+    validation:
+      enabled: true
+    resource-limits:
+      enabled: true
