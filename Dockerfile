@@ -13,7 +13,7 @@ WORKDIR /app
 RUN apk add --no-cache bash
 
 # Copy application files with proper ownership
-COPY --chown=antlr:antlr target/antlr4-mcp-server-0.1.0-M1.jar /app/app.jar
+COPY --chown=antlr:antlr target/antlr4-mcp-server-0.1.0.jar /app/app.jar
 COPY --chown=antlr:antlr src/main/resources/application.yml /app/application.yml
 
 # Create temp directory with restricted permissions

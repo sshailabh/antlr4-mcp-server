@@ -3,12 +3,13 @@
 > Enable AI assistants to help you develop ANTLR4 grammars through natural conversation
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Java](https://img.shields.io/badge/Java-11+-orange.svg)](https://openjdk.org/)
+[![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://openjdk.org/)
 [![ANTLR](https://img.shields.io/badge/ANTLR-4.13.2-green.svg)](https://www.antlr.org/)
+[![Version](https://img.shields.io/badge/Version-0.1.0-blue.svg)](https://github.com/sshailabh/antlr4-mcp-server)
 
 ## What is This?
 
-The ANTLR4 MCP Server lets you work with [ANTLR4](https://www.antlr.org/) grammars using AI assistants like **Claude** and **Cursor**. Just paste your grammar into a conversation and get instant validation, parsing, and ambiguity detection.
+The ANTLR4 MCP Server lets you work with [ANTLR4](https://www.antlr.org/) grammars using AI assistants like **Claude** and **Cursor**. Just paste your grammar into a conversation and get instant validation, parsing, and analysis.
 
 ### Quick Example
 
@@ -25,25 +26,37 @@ NUMBER : [0-9]+ ;
 
 **Claude**: ✅ Your grammar is valid! However, I notice potential ambiguity due to left-recursion...
 
+---
+
 ## Features
+
+### ✅ Currently Available (v0.1.0)
 
 | Feature | Description |
 |---------|-------------|
-| 🔍 **Grammar Validation** | Check syntax errors, undefined rules |
-| ⚠️ **Ambiguity Detection** | Find conflicts and get fix suggestions |
-| 🌳 **Parse Testing** | Test your grammar with sample inputs |
-| 📊 **Visualization** | Generate rule diagrams |
-| 📁 **File Support** | Work with grammar files |
-| 🚀 **Code Generation** | Generate parsers for multiple languages |
+| 🔍 **Grammar Validation** | Syntax checking, undefined rules detection |
+| 📊 **Parse Sample** | Test grammars with sample inputs, view parse trees |
+| ⚠️ **Ambiguity Detection** | Find parsing conflicts and ambiguities |
+| 📈 **Grammar Profiling** | Performance analysis, decision statistics |
+| 🎨 **Ambiguity Visualization** | Visual parse tree alternatives |
+| 📁 **Multi-file Support** | Import resolution, dependency graphs |
+| 🎯 **Multi-target Compilation** | Generate parsers for Java, Python, JavaScript, etc. |
+| 🔄 **ATN Visualization** | Visual automaton state machines |
+| 📊 **Call Graph Analysis** | Rule dependency and complexity metrics |
+| 🌳 **Rule Visualization** | Parse tree diagrams |
 
-## Installation
+**10 Tools Available** | **349 Tests Passing** | **Production Ready**
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
-- **Docker Desktop** (4.0+)
+- **Docker Desktop** (4.0+) - [Download here](https://www.docker.com/products/docker-desktop)
 - **Claude Desktop** or **Cursor IDE**
 
-### Setup (2 minutes)
+### Installation (2 minutes)
 
 1. **Clone and build**:
 ```bash
@@ -71,9 +84,22 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ### Configure Cursor IDE
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for Cursor setup instructions.
+Add to Cursor MCP settings:
 
-## Usage
+```json
+{
+  "mcpServers": {
+    "antlr": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "antlr4-mcp-server:latest"]
+    }
+  }
+}
+```
+
+---
+
+## Usage Examples
 
 ### Validate a Grammar
 
@@ -103,65 +129,183 @@ You: Are there any ambiguities in my expression grammar?
 
 **Claude analyzes and suggests fixes**
 
-## Example Grammars
+### Profile Performance
 
-Explore complete examples in [`docs/examples/`](docs/examples/):
+```
+You: Profile my grammar's performance on this large input
+```
 
-- **[Calculator](docs/examples/CALCULATOR.md)** - Arithmetic expressions with operator precedence
-- **[JSON](docs/examples/JSON.md)** - JSON parser with nested objects and arrays
+**Claude shows decision statistics and timing metrics**
 
-## Documentation
+---
 
-### 📖 User Documentation
-- **[Usage Guide](docs/USAGE.md)** - Complete tool reference and examples
-- **[Deployment Guide](DEPLOYMENT.md)** - Setup for Claude and Cursor
-- **[API Schemas](API_SCHEMAS.md)** - Tool specifications
+## Advanced Configuration
 
-### 🔧 Developer Documentation
-- **[Project Details](PROJECT_DETAILS.md)** - Architecture, roadmap, contributing
-- **[Architecture](ARCHITECTURE.md)** - Technical design
-- **[Security](SECURITY.md)** - Security implementation
-- **[Contributing](CONTRIBUTING.md)** - Development guidelines
+### Custom Memory Limits
 
-See [PROJECT_DETAILS.md](PROJECT_DETAILS.md) for roadmap and planned features.
+For large grammars, increase Docker memory:
+
+```json
+{
+  "mcpServers": {
+    "antlr": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "--memory=1g",
+        "antlr4-mcp-server:latest"
+      ]
+    }
+  }
+}
+```
+
+### Enable Debug Logging
+
+```json
+{
+  "mcpServers": {
+    "antlr": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "LOGGING_LEVEL_ROOT=DEBUG",
+        "antlr4-mcp-server:latest"
+      ]
+    }
+  }
+}
+```
+
+---
 
 ## Security
 
-This server implements comprehensive security measures:
-- Input validation and sanitization
-- Resource limits (memory, CPU, time)
-- Docker container isolation
-- Path traversal protection
+### Built-in Security Features
 
-See [SECURITY.md](SECURITY.md) for details.
+- ✅ **Input Validation**: Grammar names, rule names, file paths validated against injection attacks
+- ✅ **Resource Limits**: Memory (512MB), CPU, timeout (30s) constraints enforced
+- ✅ **Docker Isolation**: Non-root user, read-only filesystem, tmpfs for temp files
+- ✅ **Path Protection**: Symlink blocking, directory traversal prevention
+- ✅ **Process Security**: Command whitelisting, output limiting, no shell expansion
 
-## Roadmap
+### Security Configuration
 
-See [PROJECT_DETAILS.md](PROJECT_DETAILS.md) for the complete development roadmap and planned features.
+Default limits (configurable via `application.yml`):
+
+```yaml
+antlr:
+  max-grammar-size-mb: 10
+  max-input-size-mb: 1
+  max-response-size-kb: 50
+  compilation-timeout-seconds: 30
+```
+
+### Reporting Vulnerabilities
+
+**DO NOT** create public issues for security vulnerabilities.
+
+Email security reports to: [shailabhshashank@gmail.com]
+
+**Response Timeline**:
+- 24 hours: Initial acknowledgment
+- 72 hours: Preliminary assessment
+- 7 days: Fix development for critical issues
+
+---
 
 ## Development
 
 ### Build from Source
 
 ```bash
-# Prerequisites: JDK 11+, Maven 3.8+, Docker
+# Prerequisites: JDK 17+, Maven 3.8+, Docker
 
 git clone https://github.com/sshailabh/antlr4-mcp-server.git
 cd antlr4-mcp-server
 
-# Build
-mvn clean package
+# Build with tests
+./mvnw clean package
 
 # Run tests
-mvn test
+./mvnw test
 
 # Build Docker image
 ./docker/build.sh
 ```
 
-### Contributing
+### Run Tests
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) and [PROJECT_DETAILS.md](PROJECT_DETAILS.md) for guidelines.
+```bash
+# All tests (349 tests)
+./mvnw test
+
+# Specific test class
+./mvnw test -Dtest=GrammarCompilerTest
+
+# Integration tests only
+./mvnw test -Dtest=*IntegrationTest
+```
+
+### Project Structure
+
+```
+antlr4-mcp-server/
+├── src/main/java/.../antlr4mcp/
+│   ├── service/              # Core services (compiler, profiler, etc.)
+│   ├── tools/                # MCP tool implementations (10 tools)
+│   ├── model/                # Data models and DTOs
+│   ├── analysis/             # Call graph, ATN analysis
+│   ├── codegen/              # Multi-target code generation
+│   ├── infrastructure/       # Imports, caching, resources
+│   ├── visualization/        # SVG/DOT diagram generation
+│   └── security/             # Input validation, resource limits
+├── docs/                     # Documentation (README, API schemas, etc.)
+└── docker/                   # Docker build scripts
+```
+
+---
+
+## Documentation
+
+### 📖 User Documentation
+- **[Usage Guide](docs/USAGE.md)** - Complete tool reference
+- **[API Schemas](docs/development/API_SCHEMAS.md)** - Tool specifications
+
+---
+
+## Troubleshooting
+
+### "MCP server not responding"
+
+1. Verify Docker is running: `docker ps`
+2. Check image exists: `docker images | grep antlr4-mcp-server`
+3. Test manually:
+   ```bash
+   echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | \
+     docker run -i --rm antlr4-mcp-server:latest
+   ```
+4. Restart Claude Desktop/Cursor completely
+
+### "Grammar validation always fails"
+
+1. Ensure proper grammar declaration: `grammar MyGrammar;`
+2. Check semicolons after all rules
+3. Review Docker logs: `docker logs <container-id>`
+
+### "Docker permission denied"
+
+**macOS/Linux**:
+```bash
+sudo usermod -aG docker $USER
+# Log out and back in
+```
+
+**Windows (WSL2)**:
+- Ensure Docker Desktop is running
+- Enable WSL2 integration in Docker Desktop settings
+
+---
 
 ## Resources
 
@@ -176,21 +320,3 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) and [PROJECT_DE
 - **Discussions**: [GitHub Discussions](https://github.com/sshailabh/antlr4-mcp-server/discussions)
 - **Documentation**: See [`/docs`](docs/) directory
 
-## License
-
-Apache License 2.0 - See [LICENSE](LICENSE) for details.
-
-## Acknowledgments
-
-- **ANTLR Team** - For the amazing parser generator
-- **Terence Parr** - Creator of ANTLR
-- **Anthropic** - For Claude and MCP specification
-- **Spring AI Team** - For Java MCP SDK
-
----
-
-**Version**: 0.1.0
-**Status**: Active Development
-**Maintainer**: [@sshailabh](https://github.com/sshailabh)
-
-Ready to start? Check out the [Usage Guide](docs/USAGE.md) or try an [example](docs/examples/)!

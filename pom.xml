@@ -7,7 +7,7 @@
 
     <groupId>com.github.sshailabh.antlr4mcp</groupId>
     <artifactId>antlr4-mcp-server</artifactId>
-    <version>0.1.0-M1</version>
+    <version>0.1.0</version>
     <packaging>jar</packaging>
 
     <name>ANTLR4 MCP Server</name>
@@ -49,6 +49,10 @@
         <spring-boot.version>2.7.18</spring-boot.version>
         <antlr.version>4.13.2</antlr.version>
         <jackson.version>2.15.3</jackson.version>
+        <caffeine.version>3.1.8</caffeine.version>
+        <jgrapht.version>1.5.2</jgrapht.version>
+        <batik.version>1.17</batik.version>
+        <commons-io.version>2.15.1</commons-io.version>
 
         <!-- Plugin versions -->
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
@@ -115,6 +119,40 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
+        </dependency>
+
+        <!-- Spring Boot Cache -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+
+        <!-- Caffeine Caching -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>${caffeine.version}</version>
+        </dependency>
+
+        <!-- JGraphT for graph algorithms (dependency resolution) -->
+        <dependency>
+            <groupId>org.jgrapht</groupId>
+            <artifactId>jgrapht-core</artifactId>
+            <version>${jgrapht.version}</version>
+        </dependency>
+
+        <!-- Batik for SVG generation -->
+        <dependency>
+            <groupId>org.apache.xmlgraphics</groupId>
+            <artifactId>batik-svggen</artifactId>
+            <version>${batik.version}</version>
+        </dependency>
+
+        <!-- Commons IO for file utilities -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>${commons-io.version}</version>
         </dependency>
 
         <!-- Testing -->

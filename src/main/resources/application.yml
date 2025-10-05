@@ -21,3 +21,35 @@ antlr:
       enabled: true
     resource-limits:
       enabled: true
+
+  # Phase 2 Configuration
+  mcp:
+    version: "2.0"
+
+    cache:
+      enabled: true
+      max-size: 1000
+      ttl-seconds: 3600
+
+    resources:
+      enabled: true
+      allowed-paths:
+        - ${user.home}/workspace/grammars
+        - ${user.home}/projects/antlr
+      auto-discovery: true
+
+    performance:
+      max-grammar-size-mb: 10
+      parse-timeout-seconds: 30
+      max-concurrent-requests: 50
+      async-threshold-ms: 5000
+
+    features:
+      import-resolution: true
+      visualization: true
+      test-generation: true
+
+    security:
+      validate-inputs: true
+      sanitize-paths: true
+      max-import-depth: 10

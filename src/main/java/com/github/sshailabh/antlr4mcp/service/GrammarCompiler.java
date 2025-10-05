@@ -43,6 +43,46 @@ public class GrammarCompiler {
     @Value("${antlr.compilation-timeout-seconds:30}")
     private int compilationTimeoutSeconds;
 
+    /**
+     * Load grammar from text and return Grammar object for analysis
+     */
+    public org.antlr.v4.tool.Grammar loadGrammar(String grammarText) throws Exception {
+        log.info("Loading grammar for analysis");
+
+        String grammarName = extractGrammarName(grammarText);
+        if (grammarName == null) {
+            throw new IllegalArgumentException("Invalid grammar: no grammar declaration found");
+        }
+
+        Path tempDir = Files.createTempDirectory("antlr-load-");
+        Path tempFile = tempDir.resolve(grammarName + ".g4");
+        Files.writeString(tempFile, grammarText);
+
+        try {
+            Tool antlr = new Tool();
+            antlr.outputDirectory = tempDir.toString();
+
+            org.antlr.v4.tool.Grammar grammar = antlr.loadGrammar(tempFile.toString());
+            if (grammar == null) {
+                throw new IllegalArgumentException("Failed to load grammar");
+            }
+
+            return grammar;
+        } finally {
+            // Cleanup
+            try (Stream<Path> paths = Files.walk(tempDir)) {
+                paths.sorted(java.util.Comparator.reverseOrder())
+                     .forEach(p -> {
+                         try {
+                             Files.delete(p);
+                         } catch (Exception e) {
+                             log.warn("Failed to delete temp file: {}", p);
+                         }
+                     });
+            }
+        }
+    }
+
     public ValidationResult validate(String grammarText) {
         log.info("Validating grammar, size: {} bytes", grammarText.length());
 
