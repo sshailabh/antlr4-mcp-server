@@ -25,12 +25,18 @@ class VisualizeRuleToolTest {
 
     private VisualizeRuleTool visualizeRuleTool;
     private TreeVisualizer treeVisualizer;
+    private GrammarCompiler grammarCompiler;
     private ObjectMapper objectMapper;
     private McpSyncServerExchange mockExchange;
 
     @BeforeEach
     void setUp() {
-        treeVisualizer = new TreeVisualizer();
+        SecurityValidator securityValidator = new SecurityValidator();
+        ResourceManager resourceManager = new ResourceManager();
+        grammarCompiler = new GrammarCompiler(securityValidator, resourceManager);
+        ReflectionTestUtils.setField(grammarCompiler, "maxGrammarSizeMb", 10);
+
+        treeVisualizer = new TreeVisualizer(grammarCompiler);
         objectMapper = new ObjectMapper();
         visualizeRuleTool = new VisualizeRuleTool(treeVisualizer, objectMapper);
         mockExchange = mock(McpSyncServerExchange.class);

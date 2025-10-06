@@ -9,20 +9,25 @@ import lombok.NoArgsConstructor;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Represents a parse trace with step-by-step events during parsing.
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class VisualizationResult {
+public class ParseTrace {
     private boolean success;
-    private String format;
-    private String visualization;  // Generic visualization content
-    private String ruleName;       // Name of the rule visualized
-    private String svgContent;
-    private String dotContent;
-    private String description;
+
+    @Builder.Default
+    private List<TraceEvent> events = new ArrayList<>();
 
     @Builder.Default
     private List<GrammarError> errors = new ArrayList<>();
+
+    private String grammarName;
+    private String startRule;
+    private String input;
+    private Integer totalSteps;
 }

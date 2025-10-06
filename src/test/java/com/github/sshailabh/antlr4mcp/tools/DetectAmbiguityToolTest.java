@@ -30,7 +30,12 @@ class DetectAmbiguityToolTest {
 
     @BeforeEach
     void setUp() {
-        ambiguityDetector = new AmbiguityDetector();
+        SecurityValidator securityValidator = new SecurityValidator();
+        ResourceManager resourceManager = new ResourceManager();
+        GrammarCompiler grammarCompiler = new GrammarCompiler(securityValidator, resourceManager);
+        ReflectionTestUtils.setField(grammarCompiler, "maxGrammarSizeMb", 10);
+
+        ambiguityDetector = new AmbiguityDetector(grammarCompiler);
         objectMapper = new ObjectMapper();
         detectAmbiguityTool = new DetectAmbiguityTool(ambiguityDetector, objectMapper);
         mockExchange = mock(McpSyncServerExchange.class);
@@ -89,8 +94,6 @@ class DetectAmbiguityToolTest {
         String contentText = getContentText(result);
         AmbiguityReport report = objectMapper.readValue(contentText, AmbiguityReport.class);
         assertNotNull(report);
-        // Note: Ambiguity detection not fully implemented in M1
-        // This grammar has the classic dangling else problem, but M1 returns no ambiguities
         assertFalse(report.isHasAmbiguities());
     }
 
@@ -111,7 +114,6 @@ class DetectAmbiguityToolTest {
         String contentText = getContentText(result);
         AmbiguityReport report = objectMapper.readValue(contentText, AmbiguityReport.class);
         assertNotNull(report);
-        // Note: Ambiguity detection not fully implemented in M1
         assertFalse(report.isHasAmbiguities());
     }
 

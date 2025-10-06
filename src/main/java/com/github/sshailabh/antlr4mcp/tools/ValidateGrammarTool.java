@@ -22,8 +22,7 @@ public class ValidateGrammarTool {
         return McpSchema.Tool.builder()
             .name("validate_grammar")
             .description("Validates ANTLR4 grammar syntax and reports errors with actionable fixes. " +
-                       "Checks for syntax errors, undefined rules, and basic structural issues. " +
-                       "Note: Import statements are not supported in M1.")
+                       "Checks for syntax errors, undefined rules, and basic structural issues. ")
             .inputSchema(getInputSchema())
             .build();
     }
