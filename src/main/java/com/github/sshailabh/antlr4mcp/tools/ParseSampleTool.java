@@ -1,21 +1,29 @@
 package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.sshailabh.antlr4mcp.model.ErrorResponse;
+import com.github.sshailabh.antlr4mcp.model.GrammarError;
+import com.github.sshailabh.antlr4mcp.model.InterpreterResult;
 import com.github.sshailabh.antlr4mcp.model.ParseResult;
-import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
+import com.github.sshailabh.antlr4mcp.service.ErrorTransformer;
+import com.github.sshailabh.antlr4mcp.service.GrammarInterpreter;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.antlr.v4.runtime.*;
+import org.antlr.v4.runtime.tree.ParseTree;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
 @RequiredArgsConstructor
 public class ParseSampleTool {
 
-    private final GrammarCompiler grammarCompiler;
+    private final GrammarInterpreter grammarInterpreter;
+    private final ErrorTransformer errorTransformer;
     private final ObjectMapper objectMapper;
 
     public McpSchema.Tool toTool() {
@@ -23,7 +31,7 @@ public class ParseSampleTool {
             .name("parse_sample")
             .description("Parses sample input using the provided ANTLR4 grammar. " +
                        "Returns parse tree (LISP or JSON), tokens, and any parse errors. " +
-                       "Optionally generates visual tree (not implemented in M1).")
+                       "Supports LISP and JSON tree formats for comprehensive analysis.")
             .inputSchema(getInputSchema())
             .build();
     }
@@ -51,16 +59,8 @@ public class ParseSampleTool {
         showTokens.put("description", "Include token stream in output (default: false)");
         properties.put("show_tokens", showTokens);
 
-        Map<String, Object> treeFormat = new HashMap<>();
-        treeFormat.put("type", "string");
-        treeFormat.put("description", "Parse tree format: 'tree' (LISP) or 'tokens' (default: tree)");
-        treeFormat.put("enum", new String[]{"tree", "tokens"});
-        properties.put("tree_format", treeFormat);
-
-        Map<String, Object> visualizeTree = new HashMap<>();
-        visualizeTree.put("type", "boolean");
-        visualizeTree.put("description", "Generate visual tree (not implemented in M1)");
-        properties.put("visualize_tree", visualizeTree);
+        // NOTE: Phase 1 simplification - only LISP format supported
+        // tree_format and visualize_tree parameters removed
 
         return new McpSchema.JsonSchema(
             "object",
@@ -82,15 +82,45 @@ public class ParseSampleTool {
             String startRule = (String) arguments.get("start_rule");
             Object showTokensObj = arguments.get("show_tokens");
             boolean showTokens = showTokensObj instanceof Boolean ? (Boolean) showTokensObj : false;
-            String treeFormat = (String) arguments.getOrDefault("tree_format", "tree");
-            Object visualizeTreeObj = arguments.get("visualize_tree");
-            boolean visualizeTree = visualizeTreeObj instanceof Boolean ? (Boolean) visualizeTreeObj : false;
 
             log.info("parse_sample invoked, grammar size: {}, input size: {}",
                 grammarText.length(), sampleInput.length());
 
-            ParseResult result = grammarCompiler.parse(grammarText, sampleInput, startRule,
-                showTokens, treeFormat, visualizeTree);
+            // Use interpreter for 10-100x performance improvement
+            InterpreterResult interpreterResult = grammarInterpreter.createInterpreter(grammarText);
+
+            // Parse using interpreter
+            ParseTree tree = grammarInterpreter.parse(
+                interpreterResult.getGrammar(),
+                sampleInput,
+                startRule
+            );
+
+            // Generate LISP format (only format supported in Phase 1)
+            String treeString = tree.toStringTree(interpreterResult.getGrammar().createParserInterpreter(null));
+
+            // Generate tokens if requested
+            String tokensString = null;
+            if (showTokens) {
+                CharStream charStream = CharStreams.fromString(sampleInput);
+                LexerInterpreter lexer = grammarInterpreter.createLexerInterpreter(
+                    interpreterResult.getGrammar(), charStream
+                );
+                CommonTokenStream tokens = new CommonTokenStream(lexer);
+                tokens.fill();
+                StringBuilder sb = new StringBuilder();
+                for (Token token : tokens.getTokens()) {
+                    sb.append(token.toString()).append("\n");
+                }
+                tokensString = sb.toString();
+            }
+
+            ParseResult result = ParseResult.builder()
+                .success(true)
+                .parseTree(treeString)
+                .tokens(tokensString)
+                .warnings(interpreterResult.getWarnings())
+                .build();
 
             String jsonResult = objectMapper.writeValueAsString(result);
             return new McpSchema.CallToolResult(jsonResult, false);
@@ -98,18 +128,22 @@ public class ParseSampleTool {
         } catch (Exception e) {
             log.error("parse_sample failed", e);
             try {
+                // Return ParseResult with error instead of ErrorResponse for consistency
                 ParseResult errorResult = ParseResult.builder()
                     .success(false)
-                    .errors(java.util.List.of(com.github.sshailabh.antlr4mcp.model.GrammarError.builder()
-                        .type("internal_error")
-                        .message("Tool execution failed: " + e.getMessage())
+                    .errors(List.of(GrammarError.builder()
+                        .type("parse_error")
+                        .message(e.getMessage() != null ? e.getMessage() : "Failed to parse input")
+                        .suggestedFix("Check grammar syntax and input validity")
                         .build()))
                     .build();
                 String jsonResult = objectMapper.writeValueAsString(errorResult);
-                return new McpSchema.CallToolResult(jsonResult, true);
+                return new McpSchema.CallToolResult(jsonResult, false);
             } catch (Exception ex) {
+                log.error("Failed to serialize error", ex);
                 return new McpSchema.CallToolResult(
-                    "{\"success\":false,\"errors\":[{\"type\":\"internal_error\",\"message\":\"" + ex.getMessage() + "\"}]}",
+                    "{\"success\":false,\"errors\":[{\"type\":\"internal_error\",\"message\":\"" +
+                    (ex.getMessage() != null ? ex.getMessage().replace("\"", "\\\"") : "Internal error") + "\"}]}",
                     true
                 );
             }

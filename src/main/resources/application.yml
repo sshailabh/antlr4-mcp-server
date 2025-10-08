@@ -15,6 +15,15 @@ antlr:
   max-input-size-mb: 1
   max-response-size-kb: 50
   compilation-timeout-seconds: 30
+
+  # Phase 1: Interpreter Mode Configuration
+  parsing-timeout-seconds: 10
+  interpreter:
+    enabled: true
+    cache:
+      max-size: 1000
+      ttl-seconds: 3600
+
   security:
     enabled: true
     validation:

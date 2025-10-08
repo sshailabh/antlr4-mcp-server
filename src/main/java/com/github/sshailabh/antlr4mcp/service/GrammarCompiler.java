@@ -5,6 +5,8 @@ import com.github.sshailabh.antlr4mcp.model.ParseResult;
 import com.github.sshailabh.antlr4mcp.model.ValidationResult;
 import com.github.sshailabh.antlr4mcp.security.ResourceManager;
 import com.github.sshailabh.antlr4mcp.security.SecurityValidator;
+import com.github.sshailabh.antlr4mcp.util.FileSystemUtils;
+import com.github.sshailabh.antlr4mcp.util.GrammarNameExtractor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.antlr.v4.Tool;
@@ -49,7 +51,7 @@ public class GrammarCompiler {
     public org.antlr.v4.tool.Grammar loadGrammar(String grammarText) throws Exception {
         log.info("Loading grammar for analysis");
 
-        String grammarName = extractGrammarName(grammarText);
+        String grammarName = GrammarNameExtractor.extractGrammarName(grammarText);
         if (grammarName == null) {
             throw new IllegalArgumentException("Invalid grammar: no grammar declaration found");
         }
@@ -94,14 +96,13 @@ public class GrammarCompiler {
 
         if (containsImports(grammarText)) {
             return ValidationResult.error(
-                "Import statements are not supported in M1. " +
-                "Please inline all imported grammars. " +
-                "This limitation will be addressed in M2."
+                "Import statements are not currently supported. " +
+                "Please inline all imported grammars for validation and parsing."
             );
         }
 
         try {
-            String grammarName = extractGrammarName(grammarText);
+            String grammarName = GrammarNameExtractor.extractGrammarName(grammarText);
             if (grammarName == null) {
                 return ValidationResult.error(
                     "Could not find grammar declaration. Expected 'grammar Name;' or 'lexer grammar Name;' or 'parser grammar Name;'"
@@ -179,14 +180,7 @@ public class GrammarCompiler {
         return Pattern.compile("\\bimport\\s+[A-Za-z][A-Za-z0-9_]*\\s*;").matcher(grammarText).find();
     }
 
-    private String extractGrammarName(String grammarText) {
-        Pattern pattern = Pattern.compile("(lexer\\s+grammar|parser\\s+grammar|grammar)\\s+([A-Za-z][A-Za-z0-9_]*)\\s*;");
-        Matcher matcher = pattern.matcher(grammarText);
-        if (matcher.find()) {
-            return matcher.group(2);
-        }
-        return null;
-    }
+
 
     private int countLexerRules(String grammarText) {
         Pattern pattern = Pattern.compile("^[A-Z][A-Za-z0-9_]*\\s*:", Pattern.MULTILINE);
@@ -247,286 +241,10 @@ public class GrammarCompiler {
     }
 
     private void deleteDirectory(File directory) {
-        secureDeleteDirectory(directory);
+        FileSystemUtils.secureDeleteDirectory(directory);
     }
 
-    /**
-     * Securely deletes a directory with symlink protection.
-     */
-    private void secureDeleteDirectory(File directory) {
-        if (!directory.exists()) {
-            return;
-        }
 
-        File[] files = directory.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                // Check for symlinks to prevent escaping the temp directory
-                try {
-                    if (Files.isSymbolicLink(file.toPath())) {
-                        log.warn("Skipping symlink during cleanup: {}", file.getPath());
-                        continue;
-                    }
-                } catch (Exception e) {
-                    log.warn("Could not check symlink status for: {}", file.getPath());
-                    continue;
-                }
 
-                if (file.isDirectory()) {
-                    secureDeleteDirectory(file);
-                } else {
-                    if (!file.delete()) {
-                        log.warn("Failed to delete file: {}", file.getPath());
-                    }
-                }
-            }
-        }
-        if (!directory.delete()) {
-            log.warn("Failed to delete directory: {}", directory.getPath());
-        }
-    }
 
-    public ParseResult parse(String grammarText, String sampleInput, String startRule,
-                            boolean showTokens, String treeFormat, boolean visualizeTree) {
-        log.info("Parsing input with grammar, startRule: {}", startRule);
-
-        // Validate start rule for security
-        if (securityValidationEnabled) {
-            try {
-                securityValidator.validateRuleName(startRule);
-            } catch (SecurityException e) {
-                return ParseResult.builder()
-                    .success(false)
-                    .errors(List.of(GrammarError.builder()
-                        .type("invalid_rule_name")
-                        .message("Invalid start rule: " + e.getMessage())
-                        .build()))
-                    .build();
-            }
-        }
-
-        // Validate input size
-        if (resourceLimitsEnabled) {
-            try {
-                resourceManager.validateInputSize(sampleInput, "Sample input");
-            } catch (SecurityException e) {
-                return ParseResult.builder()
-                    .success(false)
-                    .errors(List.of(GrammarError.builder()
-                        .type("input_too_large")
-                        .message(e.getMessage())
-                        .build()))
-                    .build();
-            }
-        }
-
-        ValidationResult validation = validate(grammarText);
-        if (!validation.isSuccess()) {
-            return ParseResult.builder()
-                .success(false)
-                .errors(validation.getErrors())
-                .build();
-        }
-
-        try {
-            String grammarName = extractGrammarName(grammarText);
-
-            // Validate grammar name for security
-            if (securityValidationEnabled) {
-                try {
-                    securityValidator.validateGrammarName(grammarName);
-                } catch (SecurityException e) {
-                    return ParseResult.builder()
-                        .success(false)
-                        .errors(List.of(GrammarError.builder()
-                            .type("invalid_grammar_name")
-                            .message("Invalid grammar name: " + e.getMessage())
-                            .build()))
-                        .build();
-                }
-            }
-
-            Path tempDir = Files.createTempDirectory("antlr-parse-");
-            Path tempFile = tempDir.resolve(grammarName + ".g4");
-
-            // Validate path security
-            if (securityValidationEnabled) {
-                securityValidator.validatePath(tempFile, tempDir);
-            }
-
-            Files.writeString(tempFile, grammarText);
-
-            // Configure ANTLR Tool with arguments
-            String[] args = new String[] {
-                "-o", tempDir.toString(),
-                tempFile.toString()
-            };
-            Tool antlr = new Tool(args);
-            List<GrammarError> errors = new ArrayList<>();
-
-            antlr.addListener(new ANTLRToolListener() {
-                @Override
-                public void info(String msg) {
-                    log.debug("ANTLR info: {}", msg);
-                }
-
-                @Override
-                public void error(ANTLRMessage msg) {
-                    log.error("ANTLR error: {}", msg);
-                    errors.add(convertAntlrError(msg));
-                }
-
-                @Override
-                public void warning(ANTLRMessage msg) {
-                    log.debug("ANTLR warning: {}", msg);
-                }
-            });
-
-            // Process the grammar file to generate code
-            antlr.processGrammarsOnCommandLine();
-
-            if (!errors.isEmpty()) {
-                deleteDirectory(tempDir.toFile());
-                return ParseResult.builder()
-                    .success(false)
-                    .errors(errors)
-                    .build();
-            }
-
-            // Compile generated Java files
-            List<String> javaFiles = new ArrayList<>();
-            try (Stream<Path> stream = Files.walk(tempDir)) {
-                stream.filter(path -> path.toString().endsWith(".java"))
-                      .forEach(path -> javaFiles.add(path.toString()));
-            }
-
-            log.debug("Found Java files to compile: {}", javaFiles);
-
-            if (!javaFiles.isEmpty()) {
-                List<String> compileCommand = new ArrayList<>();
-                compileCommand.add("javac");
-                compileCommand.add("-cp");
-                compileCommand.add(getAntlrRuntimeClasspath());
-                compileCommand.add("-d");
-                compileCommand.add(tempDir.toString());
-                compileCommand.addAll(javaFiles);
-
-                log.debug("Compiling Java files: {}", String.join(" ", compileCommand));
-
-                ProcessBuilder compilePb = new ProcessBuilder(compileCommand);
-                compilePb.directory(tempDir.toFile());
-
-                ResourceManager.ProcessResult compileResult;
-                try {
-                    compileResult = resourceManager.executeWithTimeout(compilePb);
-                } catch (TimeoutException e) {
-                    deleteDirectory(tempDir.toFile());
-                    return ParseResult.builder()
-                        .success(false)
-                        .errors(List.of(GrammarError.builder()
-                            .type("timeout_error")
-                            .message("Compilation timed out")
-                            .build()))
-                        .build();
-                }
-
-                if (compileResult.getExitCode() != 0) {
-                    deleteDirectory(tempDir.toFile());
-                    return ParseResult.builder()
-                        .success(false)
-                        .errors(List.of(GrammarError.builder()
-                            .type("compilation_error")
-                            .message("Failed to compile generated parser: " + compileResult.getErrorOutput())
-                            .build()))
-                        .build();
-                }
-            }
-
-            Path inputFile = tempDir.resolve("input.txt");
-            Files.writeString(inputFile, sampleInput);
-
-            List<String> command = new ArrayList<>();
-            command.add("java");
-            command.add("-cp");
-            command.add(tempDir.toString() + File.pathSeparator + getAntlrRuntimeClasspath());
-            command.add("org.antlr.v4.gui.TestRig");
-            command.add(grammarName);
-            command.add(startRule);
-            if (showTokens) command.add("-tokens");
-            if (treeFormat != null) command.add("-" + treeFormat);
-            // TestRig reads from stdin by default, not from a file argument
-
-            ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(false);
-            pb.redirectInput(inputFile.toFile());
-
-            // Execute with timeout and resource limits
-            ResourceManager.ProcessResult processResult;
-            try {
-                processResult = resourceManager.executeWithTimeout(pb);
-            } catch (TimeoutException e) {
-                deleteDirectory(tempDir.toFile());
-                return ParseResult.builder()
-                    .success(false)
-                    .errors(List.of(GrammarError.builder()
-                        .type("timeout_error")
-                        .message("Parse operation timed out after " + compilationTimeoutSeconds + " seconds")
-                        .build()))
-                    .build();
-            }
-
-            int exitCode = processResult.getExitCode();
-            String output = processResult.getOutput();
-            String errorOutput = processResult.getErrorOutput();
-
-            log.debug("TestRig exit code: {}", exitCode);
-            log.debug("TestRig output: {}", output);
-            log.debug("TestRig error: {}", errorOutput);
-
-            deleteDirectory(tempDir.toFile());
-
-            if (exitCode != 0) {
-                String errorMsg = errorOutput != null && !errorOutput.isEmpty() ? errorOutput : output;
-                return ParseResult.builder()
-                    .success(false)
-                    .errors(List.of(GrammarError.builder()
-                        .type("parse_error")
-                        .message("Parse failed: " + resourceManager.limitOutput(errorMsg))
-                        .build()))
-                    .build();
-            }
-
-            String outputStr = resourceManager.limitOutput(output);
-            String tokens = null;
-            String parseTree = null;
-
-            if (showTokens) {
-                int treeStart = outputStr.indexOf("(");
-                if (treeStart > 0) {
-                    tokens = outputStr.substring(0, treeStart).trim();
-                    parseTree = outputStr.substring(treeStart).trim();
-                } else {
-                    tokens = outputStr;
-                }
-            } else {
-                parseTree = outputStr.trim();
-            }
-
-            return ParseResult.builder()
-                .success(true)
-                .tokens(tokens)
-                .parseTree(parseTree)
-                .build();
-
-        } catch (Exception e) {
-            log.error("Parse failed", e);
-            return ParseResult.builder()
-                .success(false)
-                .errors(List.of(GrammarError.builder()
-                    .type("internal_error")
-                    .message("Parse error: " + e.getMessage())
-                    .build()))
-                .build();
-        }
-    }
 }

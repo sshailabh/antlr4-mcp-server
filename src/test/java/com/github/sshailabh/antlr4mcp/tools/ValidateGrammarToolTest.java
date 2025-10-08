@@ -1,15 +1,16 @@
 package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.sshailabh.antlr4mcp.analysis.EmbeddedCodeAnalyzer;
 import com.github.sshailabh.antlr4mcp.model.ValidationResult;
-import com.github.sshailabh.antlr4mcp.security.ResourceManager;
-import com.github.sshailabh.antlr4mcp.security.SecurityValidator;
-import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
+import com.github.sshailabh.antlr4mcp.service.ErrorSuggestions;
+import com.github.sshailabh.antlr4mcp.service.ErrorTransformer;
+import com.github.sshailabh.antlr4mcp.service.GrammarInterpreter;
+import com.github.sshailabh.antlr4mcp.service.ParseTimeoutManager;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -24,19 +25,23 @@ import static org.mockito.Mockito.mock;
 class ValidateGrammarToolTest {
 
     private ValidateGrammarTool validateGrammarTool;
-    private GrammarCompiler grammarCompiler;
+    private GrammarInterpreter grammarInterpreter;
+    private ErrorTransformer errorTransformer;
+
     private ObjectMapper objectMapper;
     private McpSyncServerExchange mockExchange;
 
     @BeforeEach
     void setUp() {
-        SecurityValidator securityValidator = new SecurityValidator();
-        ResourceManager resourceManager = new ResourceManager();
-        grammarCompiler = new GrammarCompiler(securityValidator, resourceManager);
-        ReflectionTestUtils.setField(grammarCompiler, "maxGrammarSizeMb", 10);
+        EmbeddedCodeAnalyzer embeddedCodeAnalyzer = new EmbeddedCodeAnalyzer();
+        ParseTimeoutManager timeoutManager = new ParseTimeoutManager();
+        grammarInterpreter = new GrammarInterpreter(embeddedCodeAnalyzer, timeoutManager);
+
+        ErrorSuggestions errorSuggestions = new ErrorSuggestions();
+        errorTransformer = new ErrorTransformer(errorSuggestions);
 
         objectMapper = new ObjectMapper();
-        validateGrammarTool = new ValidateGrammarTool(grammarCompiler, objectMapper);
+        validateGrammarTool = new ValidateGrammarTool(grammarInterpreter, errorTransformer, objectMapper);
         mockExchange = mock(McpSyncServerExchange.class);
     }
 
