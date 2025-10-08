@@ -3,15 +3,10 @@ package com.github.sshailabh.antlr4mcp;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.sshailabh.antlr4mcp.analysis.CallGraphAnalyzer;
 import com.github.sshailabh.antlr4mcp.codegen.MultiTargetCompiler;
-import com.github.sshailabh.antlr4mcp.infrastructure.imports.ImportResolver;
+// ImportResolver removed - no longer needed
 import com.github.sshailabh.antlr4mcp.infrastructure.resources.GrammarResource;
 import com.github.sshailabh.antlr4mcp.infrastructure.resources.GrammarResourceProvider;
-import com.github.sshailabh.antlr4mcp.service.AmbiguityDetector;
-import com.github.sshailabh.antlr4mcp.service.AmbiguityVisualizer;
-import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
-import com.github.sshailabh.antlr4mcp.service.GrammarProfiler;
-import com.github.sshailabh.antlr4mcp.service.ParseTracer;
-import com.github.sshailabh.antlr4mcp.service.TreeVisualizer;
+import com.github.sshailabh.antlr4mcp.service.*;
 import com.github.sshailabh.antlr4mcp.tools.*;
 import com.github.sshailabh.antlr4mcp.visualization.AtnVisualizer;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
@@ -37,26 +32,25 @@ public class AntlrMcpServerApplication {
         ApplicationContext context = SpringApplication.run(AntlrMcpServerApplication.class, args);
 
         GrammarCompiler grammarCompiler = context.getBean(GrammarCompiler.class);
-        AmbiguityDetector ambiguityDetector = context.getBean(AmbiguityDetector.class);
-        AmbiguityVisualizer ambiguityVisualizer = context.getBean(AmbiguityVisualizer.class);
-        TreeVisualizer treeVisualizer = context.getBean(TreeVisualizer.class);
-        ParseTracer parseTracer = context.getBean(ParseTracer.class);
-        ImportResolver importResolver = context.getBean(ImportResolver.class);
+        GrammarInterpreter grammarInterpreter = context.getBean(GrammarInterpreter.class);
+        ErrorTransformer errorTransformer = context.getBean(ErrorTransformer.class);
+
+        // Core services for essential tools
+        RuntimeAmbiguityDetector runtimeAmbiguityDetector = context.getBean(RuntimeAmbiguityDetector.class);
         GrammarResourceProvider resourceProvider = context.getBean(GrammarResourceProvider.class);
         MultiTargetCompiler multiTargetCompiler = context.getBean(MultiTargetCompiler.class);
         AtnVisualizer atnVisualizer = context.getBean(AtnVisualizer.class);
         CallGraphAnalyzer callGraphAnalyzer = context.getBean(CallGraphAnalyzer.class);
-        GrammarProfiler grammarProfiler = context.getBean(GrammarProfiler.class);
+        GrammarComplexityAnalyzer grammarComplexityAnalyzer = context.getBean(GrammarComplexityAnalyzer.class);
+        LeftRecursionAnalyzer leftRecursionAnalyzer = context.getBean(LeftRecursionAnalyzer.class);
+        DecisionVisualizer decisionVisualizer = context.getBean(DecisionVisualizer.class);
+        TestInputGenerator testInputGenerator = context.getBean(TestInputGenerator.class);
         ObjectMapper objectMapper = context.getBean(ObjectMapper.class);
 
-        ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarCompiler, objectMapper);
-        ParseSampleTool parseSampleTool = new ParseSampleTool(grammarCompiler, objectMapper);
-        DetectAmbiguityTool detectAmbiguityTool = new DetectAmbiguityTool(ambiguityDetector, objectMapper);
-        VisualizeRuleTool visualizeRuleTool = new VisualizeRuleTool(treeVisualizer, objectMapper);
-
-        BuildLanguageContextTool buildContextTool = new BuildLanguageContextTool(
-            grammarCompiler, importResolver, objectMapper
-        );
+        // Essential tools (8 tools)
+        ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarInterpreter, errorTransformer, objectMapper);
+        ParseSampleTool parseSampleTool = new ParseSampleTool(grammarInterpreter, errorTransformer, objectMapper);
+        DetectAmbiguityTool detectAmbiguityTool = new DetectAmbiguityTool(runtimeAmbiguityDetector, objectMapper);
 
         CompileGrammarMultiTargetTool compileMultiTargetTool = new CompileGrammarMultiTargetTool(
             multiTargetCompiler, objectMapper
@@ -68,14 +62,18 @@ public class AntlrMcpServerApplication {
             callGraphAnalyzer, objectMapper
         );
 
-        ProfileGrammarTool profileGrammarTool = new ProfileGrammarTool(
-            grammarProfiler, objectMapper
+        // Removed redundant tools: ProfileGrammarTool, VisualizeAmbiguitiesTool, ParseWithTraceTool
+        AnalyzeComplexityTool analyzeComplexityTool = new AnalyzeComplexityTool(
+            grammarComplexityAnalyzer, objectMapper
         );
-        VisualizeAmbiguitiesTool visualizeAmbiguitiesTool = new VisualizeAmbiguitiesTool(
-            ambiguityVisualizer, objectMapper
+        AnalyzeLeftRecursionTool analyzeLeftRecursionTool = new AnalyzeLeftRecursionTool(
+            leftRecursionAnalyzer, objectMapper
         );
-        ParseWithTraceTool parseWithTraceTool = new ParseWithTraceTool(
-            parseTracer, objectMapper
+        VisualizeDfaTool visualizeDfaTool = new VisualizeDfaTool(
+            decisionVisualizer, objectMapper
+        );
+        GenerateTestInputsTool generateTestInputsTool = new GenerateTestInputsTool(
+            testInputGenerator, objectMapper
         );
 
         var jsonMapper = new JacksonMcpJsonMapper(objectMapper);
@@ -87,25 +85,23 @@ public class AntlrMcpServerApplication {
 
         // Build MCP server with tools (resources TBD in future update)
         McpSyncServer mcpServer = McpServer.sync(transportProvider)
-            .serverInfo("antlr4-mcp-server", "0.1.0")
+            .serverInfo("antlr4-mcp-server", "0.2.0")
+            // Core Tools (Essential - 8 tools)
             .toolCall(validateGrammarTool.toTool(), validateGrammarTool::execute)
             .toolCall(parseSampleTool.toTool(), parseSampleTool::execute)
             .toolCall(detectAmbiguityTool.toTool(), detectAmbiguityTool::execute)
-            .toolCall(visualizeRuleTool.toTool(), visualizeRuleTool::execute)
-            // M2 Tools
-            .toolCall(buildContextTool.toTool(), buildContextTool::execute)
-            // M3 Tools
-            .toolCall(compileMultiTargetTool.toTool(), compileMultiTargetTool::execute)
-            .toolCall(visualizeAtnTool.toTool(), visualizeAtnTool::execute)
             .toolCall(analyzeCallGraphTool.toTool(), analyzeCallGraphTool::execute)
-            // M3.1 Tools (Debugging)
-            .toolCall(profileGrammarTool.toTool(), profileGrammarTool::execute)
-            .toolCall(visualizeAmbiguitiesTool.toTool(), visualizeAmbiguitiesTool::execute)
-            .toolCall(parseWithTraceTool.toTool(), parseWithTraceTool::execute)
+            .toolCall(analyzeComplexityTool.toTool(), analyzeComplexityTool::execute)
+            .toolCall(analyzeLeftRecursionTool.toTool(), analyzeLeftRecursionTool::execute)
+            .toolCall(compileMultiTargetTool.toTool(), compileMultiTargetTool::execute)
+            .toolCall(generateTestInputsTool.toTool(), generateTestInputsTool::execute)
+            // Advanced Tools (Specialized - 2 tools)
+            .toolCall(visualizeAtnTool.toTool(), visualizeAtnTool::execute)
+            .toolCall(visualizeDfaTool.toTool(), visualizeDfaTool::execute)
             .immediateExecution(true)
             .build();
 
-        log.info("ANTLR4 MCP Server initialized successfully with 11 tools");
+        log.info("ANTLR4 MCP Server initialized successfully with 10 tools (optimized)");
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("Shutting down ANTLR4 MCP Server...");

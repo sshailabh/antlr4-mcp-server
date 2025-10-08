@@ -1,6 +1,5 @@
 package com.github.sshailabh.antlr4mcp.analysis;
 
-import com.github.sshailabh.antlr4mcp.analysis.EmbeddedCodeAnalyzer.EmbeddedCodeReport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
@@ -9,6 +8,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests for EmbeddedCodeAnalyzer - lightweight detection of embedded code in grammars.
+ * Focuses on boolean checks used by GrammarInterpreter for warning generation.
+ */
 @SpringBootTest
 @DisplayName("Embedded Code Analyzer Tests")
 class EmbeddedCodeAnalyzerTest {
@@ -16,76 +19,30 @@ class EmbeddedCodeAnalyzerTest {
     @Autowired
     private EmbeddedCodeAnalyzer analyzer;
 
-    private String grammarWithJavaCode;
-    private String grammarWithPythonCode;
-    private String grammarWithJavaScriptCode;
+    private String grammarWithActions;
     private String grammarWithPredicates;
-    private String grammarWithInlineActions;
+    private String grammarWithBoth;
     private String cleanGrammar;
 
     @BeforeEach
     void setUp() {
-        grammarWithJavaCode = """
-            grammar JavaGrammar;
+        grammarWithActions = """
+            grammar WithActions;
 
             @header {
                 import java.util.*;
-                import java.io.*;
             }
 
             @members {
                 private int count = 0;
-
-                public void incrementCount() {
-                    count++;
-                }
             }
 
-            expr : INT { System.out.println("Found: " + $INT.text); } ;
-
-            INT : [0-9]+ ;
-            """;
-
-        grammarWithPythonCode = """
-            grammar PythonGrammar;
-
-            @header {
-                import sys
-            }
-
-            @members {
-                def process(self, value):
-                    print(f"Processing: {value}")
-            }
-
-            expr : INT { self.process($INT.text) } ;
-
-            INT : [0-9]+ ;
-            """;
-
-        grammarWithJavaScriptCode = """
-            grammar JSGrammar;
-
-            @header {
-                const util = require('util');
-            }
-
-            @members {
-                let count = 0;
-
-                const increment = () => {
-                    count++;
-                    console.log(`Count: ${count}`);
-                };
-            }
-
-            expr : INT { console.log('Found: ' + $INT.text); } ;
-
+            expr : INT { System.out.println($INT.text); } ;
             INT : [0-9]+ ;
             """;
 
         grammarWithPredicates = """
-            grammar Predicates;
+            grammar WithPredicates;
 
             expr : { count > 0 }? INT
                  | { count < 10 }? ID
@@ -95,10 +52,12 @@ class EmbeddedCodeAnalyzerTest {
             ID : [a-zA-Z]+ ;
             """;
 
-        grammarWithInlineActions = """
-            grammar InlineActions;
+        grammarWithBoth = """
+            grammar WithBoth;
 
-            expr : INT { count++; } '+' INT { count++; }
+            @header { import java.util.*; }
+
+            expr : { count > 0 }? INT { count++; }
                  | ID { names.add($ID.text); }
                  ;
 
@@ -116,238 +75,160 @@ class EmbeddedCodeAnalyzerTest {
     }
 
     @Test
-    @DisplayName("Detect Java embedded code")
-    void testDetectJavaCode() {
-        EmbeddedCodeReport report = analyzer.analyze(grammarWithJavaCode);
-
-        assertTrue(report.hasEmbeddedCode(), "Should detect embedded code");
-        assertEquals("java", report.getDetectedLanguage(), "Should detect Java");
-        assertTrue(report.getActionCount() > 0, "Should have actions");
-        assertTrue(report.getInlineActionCount() > 0, "Should have inline actions");
-
-        // Check specific actions
-        assertTrue(report.getActions().containsKey("header"), "Should have header action");
-        assertTrue(report.getActions().containsKey("members"), "Should have members action");
-    }
-
-    @Test
-    @DisplayName("Detect Python embedded code")
-    void testDetectPythonCode() {
-        EmbeddedCodeReport report = analyzer.analyze(grammarWithPythonCode);
-
-        assertTrue(report.hasEmbeddedCode(), "Should detect embedded code");
-        assertEquals("python", report.getDetectedLanguage(), "Should detect Python");
-        assertTrue(report.getActionCount() > 0, "Should have actions");
-    }
-
-    @Test
-    @DisplayName("Detect JavaScript embedded code")
-    void testDetectJavaScriptCode() {
-        EmbeddedCodeReport report = analyzer.analyze(grammarWithJavaScriptCode);
-
-        assertTrue(report.hasEmbeddedCode(), "Should detect embedded code");
-        assertEquals("javascript", report.getDetectedLanguage(), "Should detect JavaScript");
-        assertTrue(report.getActionCount() > 0, "Should have actions");
-    }
-
-    @Test
-    @DisplayName("Detect semantic predicates")
-    void testDetectPredicates() {
-        EmbeddedCodeReport report = analyzer.analyze(grammarWithPredicates);
-
-        assertTrue(report.hasEmbeddedCode(), "Should detect embedded code");
-        assertEquals(2, report.getPredicateCount(), "Should have 2 predicates");
-        assertTrue(report.getPredicates().size() == 2, "Should have 2 predicate entries");
+    @DisplayName("Detect @header and @members actions")
+    void testDetectHeaderAndMembersActions() {
+        assertTrue(analyzer.hasActions(grammarWithActions),
+            "Should detect @header and @members actions");
+        assertFalse(analyzer.hasPredicates(grammarWithActions),
+            "Should not detect predicates");
+        assertTrue(analyzer.hasEmbeddedCode(grammarWithActions),
+            "Should detect embedded code");
     }
 
     @Test
     @DisplayName("Detect inline actions")
     void testDetectInlineActions() {
-        EmbeddedCodeReport report = analyzer.analyze(grammarWithInlineActions);
+        String inlineActionGrammar = """
+            grammar InlineActions;
 
-        assertTrue(report.hasEmbeddedCode(), "Should detect embedded code");
-        assertTrue(report.getInlineActionCount() > 0, "Should have inline actions");
+            expr : INT { count++; } '+' INT ;
+            INT : [0-9]+ ;
+            """;
+
+        assertTrue(analyzer.hasActions(inlineActionGrammar),
+            "Should detect inline actions");
+        assertTrue(analyzer.hasEmbeddedCode(inlineActionGrammar),
+            "Should detect embedded code");
+    }
+
+    @Test
+    @DisplayName("Detect semantic predicates")
+    void testDetectPredicates() {
+        assertTrue(analyzer.hasPredicates(grammarWithPredicates),
+            "Should detect semantic predicates");
+        assertFalse(analyzer.hasActions(grammarWithPredicates),
+            "Should not detect actions");
+        assertTrue(analyzer.hasEmbeddedCode(grammarWithPredicates),
+            "Should detect embedded code");
+    }
+
+    @Test
+    @DisplayName("Detect both actions and predicates")
+    void testDetectBoth() {
+        assertTrue(analyzer.hasActions(grammarWithBoth),
+            "Should detect actions");
+        assertTrue(analyzer.hasPredicates(grammarWithBoth),
+            "Should detect predicates");
+        assertTrue(analyzer.hasEmbeddedCode(grammarWithBoth),
+            "Should detect embedded code");
     }
 
     @Test
     @DisplayName("Handle clean grammar without embedded code")
     void testCleanGrammar() {
-        EmbeddedCodeReport report = analyzer.analyze(cleanGrammar);
-
-        assertFalse(report.hasEmbeddedCode(), "Should not detect embedded code");
-        assertEquals(0, report.getActionCount(), "Should have no actions");
-        assertEquals(0, report.getPredicateCount(), "Should have no predicates");
-        assertEquals(0, report.getInlineActionCount(), "Should have no inline actions");
-    }
-
-    @Test
-    @DisplayName("Strip embedded code from grammar")
-    void testStripEmbeddedCode() {
-        String stripped = analyzer.stripEmbeddedCode(grammarWithJavaCode);
-
-        assertNotNull(stripped, "Stripped grammar should not be null");
-        assertFalse(stripped.contains("@header"), "Should remove @header");
-        assertFalse(stripped.contains("@members"), "Should remove @members");
-        assertFalse(stripped.contains("System.out.println"), "Should remove inline actions");
-
-        // Should still contain grammar structure
-        assertTrue(stripped.contains("grammar JavaGrammar"), "Should keep grammar declaration");
-        assertTrue(stripped.contains("expr"), "Should keep rules");
-        assertTrue(stripped.contains("INT"), "Should keep token definitions");
-    }
-
-    @Test
-    @DisplayName("Verify hasEmbeddedCode method")
-    void testHasEmbeddedCode() {
-        assertTrue(analyzer.hasEmbeddedCode(grammarWithJavaCode),
-            "Should detect Java code");
-        assertTrue(analyzer.hasEmbeddedCode(grammarWithPythonCode),
-            "Should detect Python code");
-        assertTrue(analyzer.hasEmbeddedCode(grammarWithPredicates),
-            "Should detect predicates");
+        assertFalse(analyzer.hasActions(cleanGrammar),
+            "Should not detect actions");
+        assertFalse(analyzer.hasPredicates(cleanGrammar),
+            "Should not detect predicates");
         assertFalse(analyzer.hasEmbeddedCode(cleanGrammar),
-            "Should not detect code in clean grammar");
+            "Should not detect embedded code");
     }
 
     @Test
-    @DisplayName("Extract code with correct positions")
-    void testCodePositions() {
-        EmbeddedCodeReport report = analyzer.analyze(grammarWithJavaCode);
-
-        // Check that positions are recorded
-        report.getActions().values().forEach(fragments -> {
-            fragments.forEach(fragment -> {
-                assertTrue(fragment.getPosition() >= 0,
-                    "Position should be non-negative");
-                assertNotNull(fragment.getCode(),
-                    "Code should not be null");
-            });
-        });
-    }
-
-    @Test
-    @DisplayName("Count actions correctly")
-    void testActionCounting() {
-        EmbeddedCodeReport report = analyzer.analyze(grammarWithJavaCode);
-
-        int totalActions = report.getActionCount();
-        int headerActions = report.getActions().getOrDefault("header", java.util.Collections.emptyList()).size();
-        int memberActions = report.getActions().getOrDefault("members", java.util.Collections.emptyList()).size();
-
-        assertTrue(totalActions >= 2, "Should have at least 2 actions (header + members)");
-        assertEquals(1, headerActions, "Should have 1 header action");
-        assertEquals(1, memberActions, "Should have 1 members action");
-    }
-
-    @Test
-    @DisplayName("Generate report map correctly")
-    void testReportMap() {
-        EmbeddedCodeReport report = analyzer.analyze(grammarWithJavaCode);
-        java.util.Map<String, Object> map = report.toMap();
-
-        assertNotNull(map, "Map should not be null");
-        assertTrue((Boolean) map.get("hasEmbeddedCode"), "Should indicate embedded code present");
-        assertEquals("java", map.get("detectedLanguage"), "Should have detected language");
-        assertTrue((Integer) map.get("actionCount") > 0, "Should have action count");
-        assertTrue(map.containsKey("actions"), "Should contain actions");
-    }
-
-    @Test
-    @DisplayName("Handle mixed action types")
-    void testMixedActionTypes() {
-        String mixedGrammar = """
-            grammar Mixed;
-
-            @header { import java.util.*; }
+    @DisplayName("Detect @init and @after actions")
+    void testDetectInitAndAfterActions() {
+        String initAfterGrammar = """
+            grammar InitAfter;
 
             @init { int x = 0; }
+            @after { cleanup(); }
 
-            expr : { x > 0 }? INT { x++; }
-                 | ID
+            expr : INT ;
+            INT : [0-9]+ ;
+            """;
+
+        assertTrue(analyzer.hasActions(initAfterGrammar),
+            "Should detect @init and @after actions");
+    }
+
+    @Test
+    @DisplayName("Handle complex nested predicates")
+    void testNestedPredicates() {
+        String nestedGrammar = """
+            grammar Nested;
+
+            expr : { x > 0 && y < 10 }? INT
+                 | { z == 0 }? ID
                  ;
 
             INT : [0-9]+ ;
             ID : [a-zA-Z]+ ;
             """;
 
-        EmbeddedCodeReport report = analyzer.analyze(mixedGrammar);
-
-        assertTrue(report.hasEmbeddedCode(), "Should detect embedded code");
-        assertTrue(report.getActionCount() >= 2, "Should have header and init actions");
-        assertTrue(report.getPredicateCount() >= 1, "Should have predicate");
-        assertTrue(report.getInlineActionCount() >= 1, "Should have inline action");
+        assertTrue(analyzer.hasPredicates(nestedGrammar),
+            "Should detect nested predicates");
     }
 
     @Test
-    @DisplayName("Detect C++ code patterns")
-    void testDetectCppCode() {
-        String cppGrammar = """
-            grammar CppGrammar;
+    @DisplayName("Distinguish between predicates and actions")
+    void testDistinguishPredicatesAndActions() {
+        String predicateOnly = "{ x > 0 }?";
+        String actionOnly = "{ x++; }";
 
-            @header {
-                #include <iostream>
-                #include <vector>
-            }
+        assertTrue(analyzer.hasPredicates(predicateOnly),
+            "Should detect predicate");
+        assertFalse(analyzer.hasActions(predicateOnly),
+            "Should not detect action in predicate");
 
-            @members {
-                std::vector<int> values;
-            }
-
-            expr : INT { std::cout << "Value: " << $INT.text << std::endl; } ;
-
-            INT : [0-9]+ ;
-            """;
-
-        EmbeddedCodeReport report = analyzer.analyze(cppGrammar);
-
-        assertTrue(report.hasEmbeddedCode(), "Should detect embedded code");
-        assertEquals("cpp", report.getDetectedLanguage(), "Should detect C++");
+        assertTrue(analyzer.hasActions(actionOnly),
+            "Should detect action");
+        assertFalse(analyzer.hasPredicates(actionOnly),
+            "Should not detect predicate in action");
     }
 
     @Test
-    @DisplayName("Detect C# code patterns")
-    void testDetectCSharpCode() {
-        String csharpGrammar = """
-            grammar CSharpGrammar;
+    @DisplayName("Performance: Check large grammar efficiently")
+    void testPerformanceOnLargeGrammar() {
+        // Build a large grammar with many rules
+        StringBuilder largeGrammar = new StringBuilder("grammar Large;\n\n");
+        for (int i = 0; i < 1000; i++) {
+            largeGrammar.append("rule").append(i).append(" : INT ;\n");
+        }
+        largeGrammar.append("INT : [0-9]+ ;");
 
-            @header {
-                using System;
-                using System.Collections.Generic;
-            }
+        long start = System.nanoTime();
+        boolean hasCode = analyzer.hasEmbeddedCode(largeGrammar.toString());
+        long duration = System.nanoTime() - start;
 
-            @members {
-                private List<int> values = new List<int>();
-            }
-
-            expr : INT { Console.WriteLine("Value: " + $INT.text); } ;
-
-            INT : [0-9]+ ;
-            """;
-
-        EmbeddedCodeReport report = analyzer.analyze(csharpGrammar);
-
-        assertTrue(report.hasEmbeddedCode(), "Should detect embedded code");
-        assertEquals("csharp", report.getDetectedLanguage(), "Should detect C#");
+        assertFalse(hasCode, "Large clean grammar should have no embedded code");
+        assertTrue(duration < 100_000_000, // 100ms
+            "Should check large grammar in under 100ms");
     }
 
     @Test
-    @DisplayName("Handle unknown language")
-    void testUnknownLanguage() {
-        String unknownGrammar = """
-            grammar Unknown;
+    @DisplayName("Handle edge case: empty grammar")
+    void testEmptyGrammar() {
+        assertFalse(analyzer.hasActions(""),
+            "Empty grammar should have no actions");
+        assertFalse(analyzer.hasPredicates(""),
+            "Empty grammar should have no predicates");
+        assertFalse(analyzer.hasEmbeddedCode(""),
+            "Empty grammar should have no embedded code");
+    }
 
-            @members {
-                some_code_here
-            }
+    @Test
+    @DisplayName("Handle edge case: curly braces in string literals")
+    void testCurlyBracesInStrings() {
+        String grammarWithStrings = """
+            grammar Strings;
 
-            expr : INT ;
-            INT : [0-9]+ ;
+            expr : STRING ;
+            STRING : '"' (~["])* '"' ;
             """;
 
-        EmbeddedCodeReport report = analyzer.analyze(unknownGrammar);
-
-        assertTrue(report.hasEmbeddedCode(), "Should detect embedded code");
-        assertEquals("unknown", report.getDetectedLanguage(),
-            "Should classify as unknown language");
+        // Note: This is a simplified test. Real grammars might have {'}' in strings,
+        // but our detector is conservative and may flag them.
+        assertFalse(analyzer.hasActions(grammarWithStrings),
+            "Should not detect actions in clean grammar");
     }
 }

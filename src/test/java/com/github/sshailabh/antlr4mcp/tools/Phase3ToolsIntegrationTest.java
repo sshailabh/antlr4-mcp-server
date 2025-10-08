@@ -265,35 +265,12 @@ class Phase3ToolsIntegrationTest {
         assertFalse(response.containsKey("mermaid"));
     }
 
-    @Test
-    @DisplayName("Test visualize_atn tool - Mermaid format")
-    void testVisualizeAtnToolMermaid() throws Exception {
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammarText", expressionGrammar);
-        arguments.put("ruleName", "expr");
-        arguments.put("format", "mermaid");
-
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest(
-            "visualize_atn",
-            arguments
-        );
-
-        McpSchema.CallToolResult result = visualizeAtnTool.execute(null, request);
-
-        String jsonContent = getContentText(result);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> response = objectMapper.readValue(
-            jsonContent, Map.class
-        );
-
-        assertTrue((Boolean) response.get("success"));
-        assertTrue(response.containsKey("mermaid"));
-        assertFalse(response.containsKey("dot"));
-
-        String mermaid = (String) response.get("mermaid");
-        assertTrue(mermaid.contains("stateDiagram-v2"));
-    }
+    // Phase 1: Mermaid format deferred to later phases
+    // @Test
+    // @DisplayName("Test visualize_atn tool - Mermaid format")
+    // void testVisualizeAtnToolMermaid() throws Exception {
+    //     // Mermaid format will be re-implemented in Phase 2/3
+    // }
 
     @Test
     @DisplayName("Test visualize_atn tool - All formats")
