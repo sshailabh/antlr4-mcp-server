@@ -7,11 +7,11 @@
 
     <groupId>com.github.sshailabh.antlr4mcp</groupId>
     <artifactId>antlr4-mcp-server</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <packaging>jar</packaging>
 
     <name>ANTLR4 MCP Server</name>
-    <description>Model Context Protocol server for ANTLR4 grammar validation, parsing, and analysis</description>
+    <description>Production-ready MCP server for ANTLR4 grammar validation, parsing, and analysis</description>
     <url>https://github.com/sshailabh/antlr4-mcp-server</url>
 
     <licenses>

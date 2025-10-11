@@ -1,13 +1,7 @@
 #!/bin/bash
 
-echo "Running ANTLR4 MCP Server..."
+echo "Running ANTLR4 MCP Server v0.2.0..."
 
-# Run with security constraints
-# - No port exposure (removed -p 8080:8080)
-# - Memory limits
-# - Read-only root filesystem
-# - No new privileges
-# - Temp directory mounted
 docker run -it --rm \
   --name antlr4-mcp-server \
   --memory="512m" \

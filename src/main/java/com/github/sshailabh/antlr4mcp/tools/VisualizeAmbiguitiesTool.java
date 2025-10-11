@@ -7,7 +7,6 @@ import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
@@ -15,7 +14,6 @@ import java.util.Map;
  * MCP tool for visualizing ambiguities in ANTLR grammars
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class VisualizeAmbiguitiesTool {
 
@@ -75,10 +73,7 @@ public class VisualizeAmbiguitiesTool {
                 "visualization", result
             ));
 
-            return new McpSchema.CallToolResult(
-                java.util.List.of(new McpSchema.TextContent(responseJson)),
-                false
-            );
+            return new McpSchema.CallToolResult(responseJson, false);
 
         } catch (Exception e) {
             log.error("Error in visualize_ambiguities tool", e);
@@ -89,15 +84,10 @@ public class VisualizeAmbiguitiesTool {
                     "error", "Tool execution failed: " + e.getMessage()
                 ));
 
-                return new McpSchema.CallToolResult(
-                    java.util.List.of(new McpSchema.TextContent(errorJson)),
-                    true
-                );
+                return new McpSchema.CallToolResult(errorJson, true);
             } catch (Exception jsonError) {
                 return new McpSchema.CallToolResult(
-                    java.util.List.of(new McpSchema.TextContent(
-                        "{\"success\":false,\"error\":\"Internal error\"}"
-                    )),
+                    "{\"success\":false,\"error\":\"Internal error\"}",
                     true
                 );
             }

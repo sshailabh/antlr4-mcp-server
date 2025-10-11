@@ -1,4 +1,4 @@
-# ANTLR4 MCP Server
+# ANTLR4 MCP Server v0.2.0
 
 > Enable AI assistants to help you develop ANTLR4 grammars through natural conversation
 
@@ -65,37 +65,56 @@ cd antlr4-mcp-server
 ./docker/build.sh
 ```
 
-2. **Configure Claude Desktop**:
+2. **Configure Your AI Assistant**:
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+#### For Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
   "mcpServers": {
-    "antlr": {
+    "antlr4": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "antlr4-mcp-server:latest"]
+      "args": ["run", "-i", "--rm", "antlr4-mcp-server:0.2.0"]
     }
   }
 }
 ```
 
-3. **Restart Claude Desktop** - Done! 🎉
+#### For Cursor AI
 
-### Configure Cursor IDE
-
-Add to Cursor MCP settings:
+Edit `~/.config/cursor/config.json` (macOS/Linux) or `%APPDATA%\Cursor\config.json` (Windows):
 
 ```json
 {
   "mcpServers": {
-    "antlr": {
+    "antlr4": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "antlr4-mcp-server:latest"]
+      "args": ["run", "-i", "--rm", "antlr4-mcp-server:0.2.0"]
     }
   }
 }
 ```
+
+#### Alternative: Use JAR Directly (No Docker)
+
+For Claude Desktop or Cursor, if you prefer not using Docker:
+
+```json
+{
+  "mcpServers": {
+    "antlr4": {
+      "command": "java",
+      "args": ["-jar", "/absolute/path/to/antlr4-mcp-server/target/antlr4-mcp-server-0.2.0.jar"]
+    }
+  }
+}
+```
+
+**Important**: Use absolute paths, not relative!
+
+3. **Restart Your AI Assistant** - Done! 🎉
 
 ---
 
