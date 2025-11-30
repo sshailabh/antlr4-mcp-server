@@ -1,39 +1,39 @@
 package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.sshailabh.antlr4mcp.model.GrammarError;
 import com.github.sshailabh.antlr4mcp.model.ParseResult;
 import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
+import com.github.sshailabh.antlr4mcp.service.InterpreterParser;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+/**
+ * MCP Tool for parsing input using ANTLR4 grammars.
+ * Uses fast interpreter mode (10-100x faster than compilation).
+ */
 @Slf4j
-@RequiredArgsConstructor
 public class ParseSampleTool {
 
-    private final GrammarCompiler grammarCompiler;
+    private final InterpreterParser interpreterParser;
     private final ObjectMapper objectMapper;
 
-    public McpSchema.Tool toTool() {
-        return McpSchema.Tool.builder()
-            .name("parse_sample")
-            .description("Parses sample input using the provided ANTLR4 grammar. " +
-                       "Returns parse tree (LISP or JSON), tokens, and any parse errors. " +
-                       "Optionally generates visual tree (not implemented in M1).")
-            .inputSchema(getInputSchema())
-            .build();
+    public ParseSampleTool(GrammarCompiler grammarCompiler, ObjectMapper objectMapper) {
+        this.interpreterParser = new InterpreterParser(grammarCompiler);
+        this.objectMapper = objectMapper;
     }
 
-    private McpSchema.JsonSchema getInputSchema() {
+    public McpSchema.Tool toTool() {
         Map<String, Object> properties = new HashMap<>();
 
         Map<String, Object> grammarText = new HashMap<>();
         grammarText.put("type", "string");
-        grammarText.put("description", "Complete ANTLR4 grammar");
+        grammarText.put("description", "Complete ANTLR4 grammar text");
         properties.put("grammar_text", grammarText);
 
         Map<String, Object> sampleInput = new HashMap<>();
@@ -43,75 +43,62 @@ public class ParseSampleTool {
 
         Map<String, Object> startRule = new HashMap<>();
         startRule.put("type", "string");
-        startRule.put("description", "Parser rule to start from");
+        startRule.put("description", "Parser rule to start from (e.g., 'program', 'expression')");
         properties.put("start_rule", startRule);
 
         Map<String, Object> showTokens = new HashMap<>();
         showTokens.put("type", "boolean");
-        showTokens.put("description", "Include token stream in output (default: false)");
+        showTokens.put("description", "Include token stream in output (default: true)");
         properties.put("show_tokens", showTokens);
 
-        Map<String, Object> treeFormat = new HashMap<>();
-        treeFormat.put("type", "string");
-        treeFormat.put("description", "Parse tree format: 'tree' (LISP) or 'tokens' (default: tree)");
-        treeFormat.put("enum", new String[]{"tree", "tokens"});
-        properties.put("tree_format", treeFormat);
-
-        Map<String, Object> visualizeTree = new HashMap<>();
-        visualizeTree.put("type", "boolean");
-        visualizeTree.put("description", "Generate visual tree (not implemented in M1)");
-        properties.put("visualize_tree", visualizeTree);
-
-        return new McpSchema.JsonSchema(
-            "object",
-            properties,
-            java.util.List.of("grammar_text", "sample_input", "start_rule"),
-            null,
-            null,
-            null
-        );
+        return McpSchema.Tool.builder()
+            .name("parse_sample")
+            .description("Parse input using ANTLR4 grammar. Uses fast interpreter mode. " +
+                "Returns LISP-format parse tree, token stream, and parse errors. " +
+                "Essential for testing grammar rules during development.")
+            .inputSchema(new McpSchema.JsonSchema(
+                "object", properties,
+                List.of("grammar_text", "sample_input", "start_rule"),
+                null, null, null))
+            .build();
     }
 
     public McpSchema.CallToolResult execute(McpSyncServerExchange exchange, McpSchema.CallToolRequest request) {
         try {
             @SuppressWarnings("unchecked")
-            Map<String, Object> arguments = (Map<String, Object>) request.arguments();
+            Map<String, Object> args = (Map<String, Object>) request.arguments();
 
-            String grammarText = (String) arguments.get("grammar_text");
-            String sampleInput = (String) arguments.get("sample_input");
-            String startRule = (String) arguments.get("start_rule");
-            Object showTokensObj = arguments.get("show_tokens");
-            boolean showTokens = showTokensObj instanceof Boolean ? (Boolean) showTokensObj : false;
-            String treeFormat = (String) arguments.getOrDefault("tree_format", "tree");
-            Object visualizeTreeObj = arguments.get("visualize_tree");
-            boolean visualizeTree = visualizeTreeObj instanceof Boolean ? (Boolean) visualizeTreeObj : false;
+            String grammarText = (String) args.get("grammar_text");
+            String sampleInput = (String) args.get("sample_input");
+            String startRule = (String) args.get("start_rule");
+            boolean showTokens = args.get("show_tokens") == null || 
+                                 Boolean.TRUE.equals(args.get("show_tokens"));
 
-            log.info("parse_sample invoked, grammar size: {}, input size: {}",
-                grammarText.length(), sampleInput.length());
+            log.info("parse_sample: grammar={}b, input={}b, rule={}", 
+                grammarText.length(), sampleInput.length(), startRule);
 
-            ParseResult result = grammarCompiler.parse(grammarText, sampleInput, startRule,
-                showTokens, treeFormat, visualizeTree);
+            ParseResult result = interpreterParser.parseInterpreted(grammarText, sampleInput, startRule);
+            
+            if (!showTokens) {
+                result.setTokens(null);
+            }
 
-            String jsonResult = objectMapper.writeValueAsString(result);
-            return new McpSchema.CallToolResult(jsonResult, false);
+            return new McpSchema.CallToolResult(objectMapper.writeValueAsString(result), false);
 
         } catch (Exception e) {
             log.error("parse_sample failed", e);
             try {
-                ParseResult errorResult = ParseResult.builder()
+                ParseResult error = ParseResult.builder()
                     .success(false)
-                    .errors(java.util.List.of(com.github.sshailabh.antlr4mcp.model.GrammarError.builder()
+                    .errors(List.of(GrammarError.builder()
                         .type("internal_error")
-                        .message("Tool execution failed: " + e.getMessage())
+                        .message("Parse failed: " + e.getMessage())
                         .build()))
                     .build();
-                String jsonResult = objectMapper.writeValueAsString(errorResult);
-                return new McpSchema.CallToolResult(jsonResult, true);
+                return new McpSchema.CallToolResult(objectMapper.writeValueAsString(error), true);
             } catch (Exception ex) {
                 return new McpSchema.CallToolResult(
-                    "{\"success\":false,\"errors\":[{\"type\":\"internal_error\",\"message\":\"" + ex.getMessage() + "\"}]}",
-                    true
-                );
+                    "{\"success\":false,\"errors\":[{\"message\":\"" + ex.getMessage() + "\"}]}", true);
             }
         }
     }

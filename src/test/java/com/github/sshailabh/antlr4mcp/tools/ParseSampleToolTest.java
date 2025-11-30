@@ -2,7 +2,6 @@ package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.sshailabh.antlr4mcp.model.ParseResult;
-import com.github.sshailabh.antlr4mcp.security.ResourceManager;
 import com.github.sshailabh.antlr4mcp.security.SecurityValidator;
 import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
@@ -30,8 +29,7 @@ class ParseSampleToolTest {
     @BeforeEach
     void setUp() {
         SecurityValidator securityValidator = new SecurityValidator();
-        ResourceManager resourceManager = new ResourceManager();
-        grammarCompiler = new GrammarCompiler(securityValidator, resourceManager);
+        grammarCompiler = new GrammarCompiler(securityValidator);
         ReflectionTestUtils.setField(grammarCompiler, "maxGrammarSizeMb", 10);
 
         objectMapper = new ObjectMapper();
@@ -50,7 +48,7 @@ class ParseSampleToolTest {
         assertNotNull(tool);
         assertEquals("parse_sample", tool.name());
         assertNotNull(tool.description());
-        assertTrue(tool.description().contains("Parses sample input"));
+        assertTrue(tool.description().contains("Parse input"));
         assertNotNull(tool.inputSchema());
     }
 

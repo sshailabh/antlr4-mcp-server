@@ -4,11 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.sshailabh.antlr4mcp.model.ValidationResult;
 import com.github.sshailabh.antlr4mcp.service.AmbiguityDetector;
 import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
-import com.github.sshailabh.antlr4mcp.service.TreeVisualizer;
 import com.github.sshailabh.antlr4mcp.tools.DetectAmbiguityTool;
 import com.github.sshailabh.antlr4mcp.tools.ParseSampleTool;
 import com.github.sshailabh.antlr4mcp.tools.ValidateGrammarTool;
-import com.github.sshailabh.antlr4mcp.tools.VisualizeRuleTool;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -38,9 +36,6 @@ public class McpServerIntegrationTest {
     private AmbiguityDetector ambiguityDetector;
 
     @Autowired
-    private TreeVisualizer treeVisualizer;
-
-    @Autowired
     private ObjectMapper objectMapper;
 
     @Test
@@ -48,7 +43,6 @@ public class McpServerIntegrationTest {
         ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarCompiler, objectMapper);
         ParseSampleTool parseSampleTool = new ParseSampleTool(grammarCompiler, objectMapper);
         DetectAmbiguityTool detectAmbiguityTool = new DetectAmbiguityTool(ambiguityDetector, objectMapper);
-        VisualizeRuleTool visualizeRuleTool = new VisualizeRuleTool(treeVisualizer, objectMapper);
 
         var jsonMapper = new JacksonMcpJsonMapper(objectMapper);
         InputStream mockInput = new ByteArrayInputStream("".getBytes(StandardCharsets.UTF_8));
@@ -56,11 +50,10 @@ public class McpServerIntegrationTest {
         var transportProvider = new StdioServerTransportProvider(jsonMapper, mockInput, mockOutput);
 
         McpSyncServer mcpServer = McpServer.sync(transportProvider)
-            .serverInfo("antlr4-mcp-server", "0.1.0-M1")
+            .serverInfo("antlr4-mcp-server", "0.2.0")
             .toolCall(validateGrammarTool.toTool(), validateGrammarTool::execute)
             .toolCall(parseSampleTool.toTool(), parseSampleTool::execute)
             .toolCall(detectAmbiguityTool.toTool(), detectAmbiguityTool::execute)
-            .toolCall(visualizeRuleTool.toTool(), visualizeRuleTool::execute)
             .immediateExecution(true)
             .build();
 
@@ -73,7 +66,6 @@ public class McpServerIntegrationTest {
         ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarCompiler, objectMapper);
         ParseSampleTool parseSampleTool = new ParseSampleTool(grammarCompiler, objectMapper);
         DetectAmbiguityTool detectAmbiguityTool = new DetectAmbiguityTool(ambiguityDetector, objectMapper);
-        VisualizeRuleTool visualizeRuleTool = new VisualizeRuleTool(treeVisualizer, objectMapper);
 
         McpSchema.Tool validateTool = validateGrammarTool.toTool();
         assertNotNull(validateTool);
@@ -88,10 +80,6 @@ public class McpServerIntegrationTest {
         McpSchema.Tool ambiguityTool = detectAmbiguityTool.toTool();
         assertNotNull(ambiguityTool);
         assertEquals("detect_ambiguity", ambiguityTool.name());
-
-        McpSchema.Tool visualizeTool = visualizeRuleTool.toTool();
-        assertNotNull(visualizeTool);
-        assertEquals("visualize_rule", visualizeTool.name());
     }
 
     @Test

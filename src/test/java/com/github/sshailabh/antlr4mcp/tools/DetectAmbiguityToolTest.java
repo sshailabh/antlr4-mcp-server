@@ -2,7 +2,6 @@ package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.sshailabh.antlr4mcp.model.AmbiguityReport;
-import com.github.sshailabh.antlr4mcp.security.ResourceManager;
 import com.github.sshailabh.antlr4mcp.security.SecurityValidator;
 import com.github.sshailabh.antlr4mcp.service.AmbiguityDetector;
 import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
@@ -25,12 +24,15 @@ class DetectAmbiguityToolTest {
 
     private DetectAmbiguityTool detectAmbiguityTool;
     private AmbiguityDetector ambiguityDetector;
+    private GrammarCompiler grammarCompiler;
     private ObjectMapper objectMapper;
     private McpSyncServerExchange mockExchange;
 
     @BeforeEach
     void setUp() {
-        ambiguityDetector = new AmbiguityDetector();
+        SecurityValidator securityValidator = new SecurityValidator();
+        grammarCompiler = new GrammarCompiler(securityValidator);
+        ambiguityDetector = new AmbiguityDetector(grammarCompiler);
         objectMapper = new ObjectMapper();
         detectAmbiguityTool = new DetectAmbiguityTool(ambiguityDetector, objectMapper);
         mockExchange = mock(McpSyncServerExchange.class);

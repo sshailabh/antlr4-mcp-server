@@ -29,10 +29,19 @@ public class DetectAmbiguityTool {
 
     private McpSchema.JsonSchema getInputSchema() {
         Map<String, Object> properties = new HashMap<>();
+
         Map<String, Object> grammarText = new HashMap<>();
         grammarText.put("type", "string");
         grammarText.put("description", "Complete ANTLR4 grammar to analyze for ambiguities");
         properties.put("grammar_text", grammarText);
+
+        Map<String, Object> sampleInputs = new HashMap<>();
+        sampleInputs.put("type", "array");
+        Map<String, Object> items = new HashMap<>();
+        items.put("type", "string");
+        sampleInputs.put("items", items);
+        sampleInputs.put("description", "Optional sample inputs to test for ambiguities");
+        properties.put("sample_inputs", sampleInputs);
 
         return new McpSchema.JsonSchema(
             "object",
@@ -50,10 +59,15 @@ public class DetectAmbiguityTool {
             Map<String, Object> arguments = (Map<String, Object>) request.arguments();
 
             String grammarText = (String) arguments.get("grammar_text");
+            @SuppressWarnings("unchecked")
+            java.util.List<String> sampleInputs = arguments.containsKey("sample_inputs")
+                ? (java.util.List<String>) arguments.get("sample_inputs")
+                : null;
 
-            log.info("detect_ambiguities invoked, grammar size: {} bytes", grammarText.length());
+            log.info("detect_ambiguities invoked, grammar size: {} bytes, samples: {}",
+                grammarText.length(), sampleInputs != null ? sampleInputs.size() : 0);
 
-            AmbiguityReport report = ambiguityDetector.analyze(grammarText);
+            AmbiguityReport report = ambiguityDetector.analyzeWithSamples(grammarText, sampleInputs);
             String jsonResult = objectMapper.writeValueAsString(report);
             return new McpSchema.CallToolResult(jsonResult, false);
 

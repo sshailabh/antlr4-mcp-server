@@ -1,8 +1,6 @@
 package com.github.sshailabh.antlr4mcp.service;
 
-import com.github.sshailabh.antlr4mcp.model.ParseResult;
 import com.github.sshailabh.antlr4mcp.model.ValidationResult;
-import com.github.sshailabh.antlr4mcp.security.ResourceManager;
 import com.github.sshailabh.antlr4mcp.security.SecurityValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,14 +11,11 @@ import static org.junit.jupiter.api.Assertions.*;
 class GrammarCompilerIntegrationTest {
 
     private GrammarCompiler grammarCompiler;
-    private SecurityValidator securityValidator;
-    private ResourceManager resourceManager;
 
     @BeforeEach
     void setUp() {
-        securityValidator = new SecurityValidator();
-        resourceManager = new ResourceManager();
-        grammarCompiler = new GrammarCompiler(securityValidator, resourceManager);
+        SecurityValidator securityValidator = new SecurityValidator();
+        grammarCompiler = new GrammarCompiler(securityValidator);
         ReflectionTestUtils.setField(grammarCompiler, "maxGrammarSizeMb", 10);
     }
 
@@ -79,26 +74,5 @@ class GrammarCompilerIntegrationTest {
         ValidationResult result = grammarCompiler.validate(grammar);
         assertFalse(result.isSuccess());
         assertTrue(result.getErrors().get(0).getMessage().contains("grammar declaration"));
-    }
-
-    @Test
-    void testParseSimpleGrammar() {
-        String grammar = "grammar Hello;\n" +
-                        "start : 'hello' ;\n";
-        String input = "hello";
-
-        ParseResult result = grammarCompiler.parse(grammar, input, "start", false, "tree", false);
-        assertTrue(result.isSuccess() || result.getErrors() != null);
-    }
-
-    @Test
-    void testParseWithInvalidGrammar() {
-        String grammar = "grammar Invalid;\n" +
-                        "start : undefined ;\n";
-        String input = "test";
-
-        ParseResult result = grammarCompiler.parse(grammar, input, "start", false, "tree", false);
-        assertFalse(result.isSuccess());
-        assertFalse(result.getErrors().isEmpty());
     }
 }

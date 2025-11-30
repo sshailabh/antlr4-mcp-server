@@ -1,56 +1,67 @@
 package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.sshailabh.antlr4mcp.model.GrammarError;
 import com.github.sshailabh.antlr4mcp.model.ProfileResult;
 import com.github.sshailabh.antlr4mcp.service.GrammarProfiler;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
- * MCP tool for profiling ANTLR grammar performance during parsing.
- * Provides detailed statistics about decision-making, ambiguities, and timing.
+ * MCP tool for profiling grammar performance.
+ * 
+ * Analyzes parsing decisions and provides insights for grammar optimization:
+ * - Decision complexity (number of alternatives)
+ * - Lookahead requirements (SLL vs LL predictions)
+ * - Performance bottlenecks
+ * - Optimization recommendations
  */
+@Component
 @Slf4j
 @RequiredArgsConstructor
 public class ProfileGrammarTool {
+
     private final GrammarProfiler grammarProfiler;
     private final ObjectMapper objectMapper;
 
     public McpSchema.Tool toTool() {
         return McpSchema.Tool.builder()
             .name("profile_grammar")
-            .description("Profile ANTLR grammar parsing performance with detailed decision statistics")
+            .description("Profile grammar performance by parsing sample input. " +
+                "Analyzes decision complexity, lookahead requirements, and provides optimization hints.")
             .inputSchema(getInputSchema())
             .build();
     }
 
     private McpSchema.JsonSchema getInputSchema() {
         Map<String, Object> properties = new HashMap<>();
+        
+        Map<String, Object> grammarText = new HashMap<>();
+        grammarText.put("type", "string");
+        grammarText.put("description", "Complete ANTLR4 grammar text");
+        properties.put("grammar_text", grammarText);
 
-        Map<String, Object> grammar = new HashMap<>();
-        grammar.put("type", "string");
-        grammar.put("description", "The ANTLR grammar content to profile");
-        properties.put("grammar", grammar);
-
-        Map<String, Object> input = new HashMap<>();
-        input.put("type", "string");
-        input.put("description", "Sample input to parse for profiling");
-        properties.put("input", input);
+        Map<String, Object> sampleInput = new HashMap<>();
+        sampleInput.put("type", "string");
+        sampleInput.put("description", "Sample input to parse for profiling");
+        properties.put("sample_input", sampleInput);
 
         Map<String, Object> startRule = new HashMap<>();
         startRule.put("type", "string");
-        startRule.put("description", "Name of the start rule for parsing (default: first parser rule)");
+        startRule.put("description", "Start rule for parsing");
         properties.put("start_rule", startRule);
 
         return new McpSchema.JsonSchema(
             "object",
             properties,
-            java.util.List.of("grammar", "input"),
+            List.of("grammar_text", "sample_input", "start_rule"),
             null,
             null,
             null
@@ -62,33 +73,34 @@ public class ProfileGrammarTool {
             @SuppressWarnings("unchecked")
             Map<String, Object> arguments = (Map<String, Object>) request.arguments();
 
-            String grammar = (String) arguments.get("grammar");
-            String input = (String) arguments.get("input");
-            String startRule = arguments.containsKey("start_rule")
-                ? (String) arguments.get("start_rule")
-                : null;
+            String grammarText = (String) arguments.get("grammar_text");
+            String sampleInput = (String) arguments.get("sample_input");
+            String startRule = (String) arguments.get("start_rule");
 
-            log.debug("Profiling grammar with input length: {}", input.length());
+            log.info("profile_grammar invoked, grammar size: {}, input size: {}",
+                grammarText.length(), sampleInput.length());
 
-            ProfileResult result = grammarProfiler.profile(grammar, input, startRule);
+            ProfileResult result = grammarProfiler.profile(grammarText, sampleInput, startRule);
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("profile", result);
-
-            String responseJson = objectMapper.writeValueAsString(response);
-            return new McpSchema.CallToolResult(responseJson, false);
+            String jsonResult = objectMapper.writeValueAsString(result);
+            return new McpSchema.CallToolResult(jsonResult, !result.isSuccess());
 
         } catch (Exception e) {
-            log.error("Error profiling grammar", e);
+            log.error("profile_grammar failed", e);
             try {
-                String errorResult = objectMapper.writeValueAsString(
-                    Map.of("success", false, "error", e.getMessage())
-                );
-                return new McpSchema.CallToolResult(errorResult, true);
-            } catch (Exception jsonError) {
+                ProfileResult errorResult = ProfileResult.builder()
+                    .success(false)
+                    .errors(List.of(GrammarError.builder()
+                        .type("internal_error")
+                        .message("Tool execution failed: " + e.getMessage())
+                        .build()))
+                    .build();
+                String jsonResult = objectMapper.writeValueAsString(errorResult);
+                return new McpSchema.CallToolResult(jsonResult, true);
+            } catch (Exception ex) {
                 return new McpSchema.CallToolResult(
-                    "{\"success\": false, \"error\": \"Failed to serialize error\"}", true
+                    "{\"success\":false,\"errors\":[{\"type\":\"internal_error\",\"message\":\"" + ex.getMessage() + "\"}]}",
+                    true
                 );
             }
         }

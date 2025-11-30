@@ -1,237 +1,147 @@
 package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.sshailabh.antlr4mcp.model.ProfileResult;
+import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
 import com.github.sshailabh.antlr4mcp.service.GrammarProfiler;
+import com.github.sshailabh.antlr4mcp.security.SecurityValidator;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
-@SpringBootTest
 class ProfileGrammarToolTest {
 
-    @Autowired
-    private GrammarProfiler grammarProfiler;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
     private ProfileGrammarTool tool;
+    private GrammarProfiler grammarProfiler;
+    private ObjectMapper objectMapper;
+    private McpSyncServerExchange mockExchange;
 
     private static final String SIMPLE_GRAMMAR = """
         grammar Simple;
-        prog : expr EOF ;
-        expr : term (('+' | '-') term)* ;
-        term : factor (('*' | '/') factor)* ;
-        factor : INT | '(' expr ')' ;
-        INT : [0-9]+ ;
-        WS : [ \\t\\r\\n]+ -> skip ;
+        start: ID+ ;
+        ID: [a-z]+ ;
+        WS: [ \\t\\n\\r]+ -> skip ;
+        """;
+
+    private static final String EXPR_GRAMMAR = """
+        grammar Expr;
+        prog: expr+ ;
+        expr: expr ('*'|'/') expr
+            | expr ('+'|'-') expr
+            | '(' expr ')'
+            | NUMBER
+            ;
+        NUMBER: [0-9]+ ;
+        WS: [ \\t\\n\\r]+ -> skip ;
         """;
 
     @BeforeEach
     void setUp() {
+        SecurityValidator securityValidator = new SecurityValidator();
+        GrammarCompiler grammarCompiler = new GrammarCompiler(securityValidator);
+        ReflectionTestUtils.setField(grammarCompiler, "maxGrammarSizeMb", 10);
+        
+        grammarProfiler = new GrammarProfiler(grammarCompiler);
+        objectMapper = new ObjectMapper();
         tool = new ProfileGrammarTool(grammarProfiler, objectMapper);
-    }
-
-    @Test
-    void testGetTool() {
-        McpSchema.Tool toolSchema = tool.toTool();
-
-        assertNotNull(toolSchema);
-        assertEquals("profile_grammar", toolSchema.name());
-        assertNotNull(toolSchema.description());
-        assertNotNull(toolSchema.inputSchema());
-
-        // Verify input schema exists
-        assertNotNull(toolSchema.inputSchema());
-    }
-
-    @Test
-    void testHandleToolCallSuccess() {
-        Map<String, Object> arguments = Map.of(
-            "grammar", SIMPLE_GRAMMAR,
-            "input", "10 + 20"
-        );
-
-        McpSchema.CallToolRequest request = createRequest(arguments);
-        McpSchema.CallToolResult result = tool.execute(null, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        assertTrue(contentText.contains("success"));
-        assertTrue(contentText.contains("profile"));
-        assertTrue(contentText.contains("parserStats"));
-    }
-
-    @Test
-    void testHandleToolCallWithStartRule() {
-        Map<String, Object> arguments = Map.of(
-            "grammar", SIMPLE_GRAMMAR,
-            "input", "10 + 20",
-            "startRule", "expr"
-        );
-
-        McpSchema.CallToolRequest request = createRequest(arguments);
-        McpSchema.CallToolResult result = tool.execute(null, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        assertTrue(contentText.contains("success"));
-        assertTrue(contentText.contains("profile"));
-    }
-
-    @Test
-    void testHandleToolCallComplexExpression() {
-        Map<String, Object> arguments = Map.of(
-            "grammar", SIMPLE_GRAMMAR,
-            "input", "10 + 20 * 30 - (5 + 3)"
-        );
-
-        McpSchema.CallToolRequest request = createRequest(arguments);
-        McpSchema.CallToolResult result = tool.execute(null, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        assertTrue(contentText.contains("success"));
-        assertTrue(contentText.contains("decisionStats"));
-        assertTrue(contentText.contains("totalInvocations"));
-    }
-
-    @Test
-    void testHandleToolCallInvalidGrammar() {
-        Map<String, Object> arguments = Map.of(
-            "grammar", "grammar Invalid; prog : UNDEFINED ;",
-            "input", "test"
-        );
-
-        McpSchema.CallToolRequest request = createRequest(arguments);
-        McpSchema.CallToolResult result = tool.execute(null, request);
-
-        assertNotNull(result);
-        // Should return result with success=false
-        String contentText = getContentText(result);
-        assertTrue(contentText.contains("success") || contentText.contains("error"));
-    }
-
-    @Test
-    void testHandleToolCallEmptyInput() {
-        String emptyGrammar = """
-            grammar Empty;
-            prog : EOF ;
-            """;
-
-        Map<String, Object> arguments = Map.of(
-            "grammar", emptyGrammar,
-            "input", ""
-        );
-
-        McpSchema.CallToolRequest request = createRequest(arguments);
-        McpSchema.CallToolResult result = tool.execute(null, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        assertTrue(contentText.contains("success"));
-    }
-
-    @Test
-    void testHandleToolCallAmbiguousGrammar() {
-        String ambiguousGrammar = """
-            grammar Ambiguous;
-            prog : expr EOF ;
-            expr : expr ('*'|'/') expr
-                 | expr ('+'|'-') expr
-                 | INT
-                 ;
-            INT : [0-9]+ ;
-            WS : [ \\t\\r\\n]+ -> skip ;
-            """;
-
-        Map<String, Object> arguments = Map.of(
-            "grammar", ambiguousGrammar,
-            "input", "10 + 20 * 30"
-        );
-
-        McpSchema.CallToolRequest request = createRequest(arguments);
-        McpSchema.CallToolResult result = tool.execute(null, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        assertTrue(contentText.contains("success"));
-        assertTrue(contentText.contains("profile"));
-    }
-
-    @Test
-    void testHandleToolCallLargeInput() {
-        // Generate larger expression
-        StringBuilder largeInput = new StringBuilder();
-        for (int i = 0; i < 30; i++) {
-            if (i > 0) largeInput.append(" + ");
-            largeInput.append(i);
-        }
-
-        Map<String, Object> arguments = Map.of(
-            "grammar", SIMPLE_GRAMMAR,
-            "input", largeInput.toString()
-        );
-
-        McpSchema.CallToolRequest request = createRequest(arguments);
-        McpSchema.CallToolResult result = tool.execute(null, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        assertTrue(contentText.contains("success"));
-        assertTrue(contentText.contains("parsingTimeMs"));
-    }
-
-    @Test
-    void testHandleToolCallVerifyMetrics() {
-        Map<String, Object> arguments = Map.of(
-            "grammar", SIMPLE_GRAMMAR,
-            "input", "10 + 20 * 30"
-        );
-
-        McpSchema.CallToolRequest request = createRequest(arguments);
-        McpSchema.CallToolResult result = tool.execute(null, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        assertTrue(contentText.contains("success"));
-        assertTrue(contentText.contains("totalDecisions"));
-        assertTrue(contentText.contains("totalInvocations"));
-        assertTrue(contentText.contains("totalAmbiguities"));
-        assertTrue(contentText.contains("parsingTimeMs"));
-    }
-
-    // Helper methods
-    private McpSchema.CallToolRequest createRequest(Map<String, Object> arguments) {
-        return new McpSchema.CallToolRequest(
-            "profile_grammar",
-            arguments
-        );
+        mockExchange = mock(McpSyncServerExchange.class);
     }
 
     private String getContentText(McpSchema.CallToolResult result) {
         return ((McpSchema.TextContent) result.content().get(0)).text();
+    }
+
+    private McpSchema.CallToolRequest createRequest(Map<String, Object> args) {
+        return new McpSchema.CallToolRequest("profile_grammar", args);
+    }
+
+    @Test
+    void testToTool() {
+        McpSchema.Tool mcpTool = tool.toTool();
+        
+        assertThat(mcpTool.name()).isEqualTo("profile_grammar");
+        assertThat(mcpTool.description()).contains("Profile grammar performance");
+    }
+
+    @Test
+    void testProfileSimpleGrammar() throws Exception {
+        McpSchema.CallToolRequest request = createRequest(Map.of(
+            "grammar_text", SIMPLE_GRAMMAR,
+            "sample_input", "hello world test",
+            "start_rule", "start"
+        ));
+
+        McpSchema.CallToolResult result = tool.execute(mockExchange, request);
+
+        assertThat(result.isError()).isFalse();
+        
+        ProfileResult profile = objectMapper.readValue(getContentText(result), ProfileResult.class);
+        
+        assertThat(profile.isSuccess()).isTrue();
+        assertThat(profile.getGrammarName()).isEqualTo("Simple");
+        assertThat(profile.getTotalTimeNanos()).isGreaterThan(0);
+        assertThat(profile.getDecisions()).isNotEmpty();
+        assertThat(profile.getInsights()).isNotEmpty();
+    }
+
+    @Test
+    void testProfileExpressionGrammar() throws Exception {
+        McpSchema.CallToolRequest request = createRequest(Map.of(
+            "grammar_text", EXPR_GRAMMAR,
+            "sample_input", "1 + 2 * 3",
+            "start_rule", "prog"
+        ));
+
+        McpSchema.CallToolResult result = tool.execute(mockExchange, request);
+
+        assertThat(result.isError()).isFalse();
+        
+        ProfileResult profile = objectMapper.readValue(getContentText(result), ProfileResult.class);
+        
+        assertThat(profile.isSuccess()).isTrue();
+        assertThat(profile.getGrammarName()).isEqualTo("Expr");
+        assertThat(profile.getDecisions()).hasSizeGreaterThan(1);
+        assertThat(profile.getInsights()).isNotEmpty();
+    }
+
+    @Test
+    void testProfileInvalidStartRule() throws Exception {
+        McpSchema.CallToolRequest request = createRequest(Map.of(
+            "grammar_text", SIMPLE_GRAMMAR,
+            "sample_input", "hello",
+            "start_rule", "nonexistent"
+        ));
+
+        McpSchema.CallToolResult result = tool.execute(mockExchange, request);
+
+        ProfileResult profile = objectMapper.readValue(getContentText(result), ProfileResult.class);
+        
+        assertThat(profile.isSuccess()).isFalse();
+        assertThat(profile.getErrors()).isNotEmpty();
+        assertThat(profile.getErrors().get(0).getMessage()).contains("nonexistent");
+    }
+
+    @Test
+    void testProfileInvalidGrammar() throws Exception {
+        McpSchema.CallToolRequest request = createRequest(Map.of(
+            "grammar_text", "not a grammar",
+            "sample_input", "test",
+            "start_rule", "start"
+        ));
+
+        McpSchema.CallToolResult result = tool.execute(mockExchange, request);
+
+        ProfileResult profile = objectMapper.readValue(getContentText(result), ProfileResult.class);
+        
+        assertThat(profile.isSuccess()).isFalse();
+        assertThat(profile.getErrors()).isNotEmpty();
     }
 }
