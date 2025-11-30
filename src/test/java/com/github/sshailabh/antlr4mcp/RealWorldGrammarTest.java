@@ -4,10 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.sshailabh.antlr4mcp.model.AmbiguityReport;
 import com.github.sshailabh.antlr4mcp.model.ParseResult;
 import com.github.sshailabh.antlr4mcp.model.ValidationResult;
-import com.github.sshailabh.antlr4mcp.service.RuntimeAmbiguityDetector;
-import com.github.sshailabh.antlr4mcp.service.ErrorTransformer;
+import com.github.sshailabh.antlr4mcp.service.AmbiguityDetector;
 import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
-import com.github.sshailabh.antlr4mcp.service.GrammarInterpreter;
 import com.github.sshailabh.antlr4mcp.tools.DetectAmbiguityTool;
 import com.github.sshailabh.antlr4mcp.tools.ParseSampleTool;
 import com.github.sshailabh.antlr4mcp.tools.ValidateGrammarTool;
@@ -30,13 +28,7 @@ public class RealWorldGrammarTest {
     private GrammarCompiler grammarCompiler;
 
     @Autowired
-    private GrammarInterpreter grammarInterpreter;
-
-    @Autowired
-    private ErrorTransformer errorTransformer;
-
-    @Autowired
-    private RuntimeAmbiguityDetector runtimeAmbiguityDetector;
+    private AmbiguityDetector ambiguityDetector;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -112,7 +104,7 @@ public class RealWorldGrammarTest {
 
     @Test
     public void testValidateCalculatorGrammar() throws Exception {
-        ValidateGrammarTool tool = new ValidateGrammarTool(grammarInterpreter, errorTransformer, objectMapper);
+        ValidateGrammarTool tool = new ValidateGrammarTool(grammarCompiler, objectMapper);
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", CALCULATOR_GRAMMAR);
@@ -137,7 +129,7 @@ public class RealWorldGrammarTest {
 
     @Test
     public void testValidateJsonGrammar() throws Exception {
-        ValidateGrammarTool tool = new ValidateGrammarTool(grammarInterpreter, errorTransformer, objectMapper);
+        ValidateGrammarTool tool = new ValidateGrammarTool(grammarCompiler, objectMapper);
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", JSON_GRAMMAR);
@@ -162,7 +154,7 @@ public class RealWorldGrammarTest {
 
     @Test
     public void testParseCalculatorExpression() throws Exception {
-        ParseSampleTool tool = new ParseSampleTool(grammarInterpreter, errorTransformer, objectMapper);
+        ParseSampleTool tool = new ParseSampleTool(grammarCompiler, objectMapper);
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", CALCULATOR_GRAMMAR);
@@ -189,7 +181,7 @@ public class RealWorldGrammarTest {
 
     @Test
     public void testParseJsonObject() throws Exception {
-        ParseSampleTool tool = new ParseSampleTool(grammarInterpreter, errorTransformer, objectMapper);
+        ParseSampleTool tool = new ParseSampleTool(grammarCompiler, objectMapper);
 
         String jsonInput = "{\"name\": \"test\", \"value\": 42, \"active\": true}";
 
@@ -218,7 +210,7 @@ public class RealWorldGrammarTest {
 
     @Test
     public void testParseJsonArray() throws Exception {
-        ParseSampleTool tool = new ParseSampleTool(grammarInterpreter, errorTransformer, objectMapper);
+        ParseSampleTool tool = new ParseSampleTool(grammarCompiler, objectMapper);
 
         String jsonInput = "[1, 2, 3, \"test\", true, null]";
 
@@ -247,12 +239,10 @@ public class RealWorldGrammarTest {
 
     @Test
     public void testDetectCalculatorAmbiguity() throws Exception {
-        DetectAmbiguityTool tool = new DetectAmbiguityTool(runtimeAmbiguityDetector, objectMapper);
+        DetectAmbiguityTool tool = new DetectAmbiguityTool(ambiguityDetector, objectMapper);
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", CALCULATOR_GRAMMAR);
-        arguments.put("start_rule", "expr");
-        arguments.put("sample_inputs", java.util.List.of("1", "1+2", "1*2+3", "(1+2)*3"));
 
         McpSchema.CallToolRequest request = McpSchema.CallToolRequest.builder()
             .name("detect_ambiguity")
@@ -268,14 +258,13 @@ public class RealWorldGrammarTest {
         AmbiguityReport report = objectMapper.readValue(contentText, AmbiguityReport.class);
 
         assertNotNull(report);
-        assertEquals(4, report.getTotalSamplesParsed());
         assertFalse(report.isHasAmbiguities());
         assertTrue(report.getAmbiguities().isEmpty());
     }
 
     @Test
     public void testParseCalculatorWithParentheses() throws Exception {
-        ParseSampleTool tool = new ParseSampleTool(grammarInterpreter, errorTransformer, objectMapper);
+        ParseSampleTool tool = new ParseSampleTool(grammarCompiler, objectMapper);
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", CALCULATOR_GRAMMAR);
@@ -303,7 +292,7 @@ public class RealWorldGrammarTest {
 
     @Test
     public void testParseNestedJsonObject() throws Exception {
-        ParseSampleTool tool = new ParseSampleTool(grammarInterpreter, errorTransformer, objectMapper);
+        ParseSampleTool tool = new ParseSampleTool(grammarCompiler, objectMapper);
 
         String jsonInput = "{\"user\": {\"name\": \"Alice\", \"age\": 30}, \"items\": [1, 2, 3]}";
 

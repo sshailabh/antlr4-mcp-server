@@ -1,261 +1,219 @@
 package com.github.sshailabh.antlr4mcp.service;
 
-import com.github.sshailabh.antlr4mcp.model.LeftRecursionAnalysis;
-import com.github.sshailabh.antlr4mcp.service.GrammarInterpreter;
-import com.github.sshailabh.antlr4mcp.model.InterpreterResult;
-import com.github.sshailabh.antlr4mcp.util.GrammarNameExtractor;
-import com.github.sshailabh.antlr4mcp.util.FileSystemUtils;
-import org.antlr.v4.Tool;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import com.github.sshailabh.antlr4mcp.model.LeftRecursiveRule;
+import com.github.sshailabh.antlr4mcp.model.LeftRecursionReport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.antlr.v4.Tool;
-import org.antlr.v4.runtime.atn.*;
+import org.antlr.v4.runtime.atn.ATN;
+import org.antlr.v4.runtime.atn.ATNState;
+import org.antlr.v4.runtime.atn.RuleStartState;
+import org.antlr.v4.runtime.atn.RuleStopState;
+import org.antlr.v4.runtime.atn.RuleTransition;
+import org.antlr.v4.runtime.atn.Transition;
 import org.antlr.v4.tool.Grammar;
+import org.antlr.v4.tool.LeftRecursiveRule;
 import org.antlr.v4.tool.Rule;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * Analyzes ANTLR4 grammars for left-recursion patterns.
- * Detects direct left-recursion and identifies rules transformed by ANTLR.
+ * Service for analyzing left recursion in ANTLR grammars.
+ * 
+ * Left recursion is a critical concept in parser design:
+ * - Direct left recursion: A -> A α | β
+ * - Indirect left recursion: A -> B α, B -> A β
+ * 
+ * ANTLR4 handles left recursion automatically by transforming it,
+ * but understanding the patterns helps with grammar optimization.
  */
-@Slf4j
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class LeftRecursionAnalyzer {
 
-    private final GrammarInterpreter grammarInterpreter;
+    private final GrammarCompiler grammarCompiler;
 
     /**
-     * Analyze left-recursion in the grammar.
-     *
-     * @param grammarText The complete ANTLR4 grammar text
-     * @return LeftRecursionAnalysis containing all findings
+     * Analyze left recursion patterns in the grammar.
      */
-    public LeftRecursionAnalysis analyze(String grammarText) {
-        log.info("Analyzing grammar for left-recursion (size: {} bytes)", grammarText.length());
-
-        if (grammarText == null || grammarText.trim().isEmpty()) {
-            throw new IllegalArgumentException("Grammar text cannot be null or empty");
-        }
+    public LeftRecursionReport analyze(String grammarText) {
+        log.info("Analyzing left recursion in grammar");
 
         try {
-            // Try using GrammarInterpreter first for 10-100x performance improvement
-            Grammar grammar;
-            try {
-                InterpreterResult interpreterResult = grammarInterpreter.createInterpreter(grammarText);
-                grammar = interpreterResult.getGrammar();
-                log.debug("Using GrammarInterpreter for left-recursion analysis (fast path)");
-            } catch (Exception e) {
-                log.warn("GrammarInterpreter failed, falling back to full compilation: {}", e.getMessage());
-                // Fallback to full compilation if interpreter fails
-                grammar = loadGrammarWithFullCompilation(grammarText);
-                if (grammar == null) {
-                    throw new IllegalStateException("Failed to load grammar for left-recursion analysis");
-                }
+            Grammar grammar = grammarCompiler.loadGrammar(grammarText);
+            if (grammar == null) {
+                return LeftRecursionReport.error("Failed to load grammar");
             }
 
-            // Build analysis
-            LeftRecursionAnalysis analysis = LeftRecursionAnalysis.builder().build();
-            int totalParserRules = 0;
+            List<LeftRecursionReport.RecursiveRule> recursiveRules = new ArrayList<>();
+            List<LeftRecursionReport.RecursionCycle> cycles = new ArrayList<>();
 
-            // Analyze each parser rule
+            // Find all left-recursive rules
             for (Rule rule : grammar.rules.values()) {
-                if (Character.isLowerCase(rule.name.charAt(0))) {
-                    totalParserRules++;
-
-                    LeftRecursiveRule lrr = analyzeRule(rule, grammar);
-                    if (lrr != null) {
-                        analysis.getLeftRecursiveRules().add(lrr);
-
-                        if (lrr.isTransformed()) {
-                            analysis.getTransformedRules().add(rule.name);
-                        }
-                    }
+                if (rule instanceof LeftRecursiveRule) {
+                    LeftRecursiveRule lrRule = (LeftRecursiveRule) rule;
+                    
+                    LeftRecursionReport.RecursiveRule ruleInfo = LeftRecursionReport.RecursiveRule.builder()
+                        .ruleName(rule.name)
+                        .isDirect(isDirectLeftRecursive(grammar, rule))
+                        .primaryAlts(toList(lrRule.getPrimaryAlts()))
+                        .recursiveAlts(toList(lrRule.getRecursiveOpAlts()))
+                        .originalAlternatives(rule.numberOfAlts)
+                        .build();
+                    
+                    recursiveRules.add(ruleInfo);
                 }
             }
 
-            analysis.setTotalRules(totalParserRules);
-            analysis.setLeftRecursiveCount(analysis.getLeftRecursiveRules().size());
-            analysis.setTransformedCount(analysis.getTransformedRules().size());
+            // Detect recursion cycles using ATN traversal
+            if (grammar.atn != null) {
+                List<Set<String>> detectedCycles = detectRecursionCycles(grammar);
+                for (Set<String> cycle : detectedCycles) {
+                    cycles.add(LeftRecursionReport.RecursionCycle.builder()
+                        .rules(new ArrayList<>(cycle))
+                        .isDirect(cycle.size() == 1)
+                        .build());
+                }
+            }
 
-            log.info("Left-recursion analysis complete: {} left-recursive rules found ({} transformed)",
-                    analysis.getLeftRecursiveCount(), analysis.getTransformedCount());
+            // Calculate statistics
+            int totalRules = grammar.rules.size();
+            int leftRecursiveCount = recursiveRules.size();
+            int directCount = (int) recursiveRules.stream().filter(r -> r.isDirect()).count();
+            int indirectCount = leftRecursiveCount - directCount;
 
-            return analysis;
-
-        } catch (IllegalArgumentException e) {
-            log.error("Invalid grammar for left-recursion analysis", e);
-            throw e;
-        } catch (Exception e) {
-            log.error("Left-recursion analysis failed", e);
-            throw new RuntimeException("Left-recursion analysis error: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Analyze a single rule for left-recursion.
-     */
-    private LeftRecursiveRule analyzeRule(Rule rule, Grammar grammar) {
-        // Check for transformation markers (precpred predicates)
-        boolean isTransformed = isTransformed(rule);
-
-        // Check for direct left-recursion
-        boolean isDirect = isDirectLeftRecursive(rule, grammar);
-
-        // Only report if left-recursive
-        if (!isTransformed && !isDirect) {
-            return null;
-        }
-
-        // Extract precedence levels if transformed
-        List<Integer> precedenceLevels = new ArrayList<>();
-        if (isTransformed) {
-            precedenceLevels = extractPrecedenceLevels(rule);
-        }
-
-        return LeftRecursiveRule.builder()
-                .ruleName(rule.name)
-                .isDirect(isDirect)
-                .isTransformed(isTransformed)
-                .precedenceLevels(precedenceLevels)
-                .alternatives(rule.numberOfAlts)
-                .line(rule.ast != null ? rule.ast.getLine() : null)
+            return LeftRecursionReport.builder()
+                .success(true)
+                .hasLeftRecursion(!recursiveRules.isEmpty())
+                .recursiveRules(recursiveRules)
+                .cycles(cycles)
+                .totalRules(totalRules)
+                .leftRecursiveRuleCount(leftRecursiveCount)
+                .directLeftRecursionCount(directCount)
+                .indirectLeftRecursionCount(indirectCount)
                 .build();
-    }
-
-    /**
-     * Check if rule has been transformed by ANTLR (indicated by precpred predicates).
-     */
-    private boolean isTransformed(Rule rule) {
-        if (rule.ast != null) {
-            String astString = rule.ast.toStringTree();
-            return astString.contains("precpred");
-        }
-        return false;
-    }
-
-    /**
-     * Check if rule is directly left-recursive (first alternative starts with self-call).
-     */
-    private boolean isDirectLeftRecursive(Rule rule, Grammar grammar) {
-        if (rule.index < 0 || rule.index >= grammar.atn.ruleToStartState.length) {
-            return false;
-        }
-
-        RuleStartState startState = grammar.atn.ruleToStartState[rule.index];
-        if (startState == null || startState.getNumberOfTransitions() == 0) {
-            return false;
-        }
-
-        // Check first transition
-        Transition firstTransition = startState.transition(0);
-        ATNState target = firstTransition.target;
-
-        // Follow epsilon transitions to find the first real transition
-        while (target != null && target instanceof BasicState &&
-               target.getNumberOfTransitions() > 0) {
-            Transition nextTransition = target.transition(0);
-
-            if (nextTransition instanceof RuleTransition) {
-                RuleTransition rt = (RuleTransition) nextTransition;
-                // Check if it calls itself
-                return rt.ruleIndex == rule.index;
-            }
-
-            // For non-rule transitions, not left-recursive
-            if (!(nextTransition instanceof EpsilonTransition)) {
-                return false;
-            }
-
-            target = nextTransition.target;
-        }
-
-        return false;
-    }
-
-    /**
-     * Extract precedence levels from precpred predicates.
-     * Predicates have format: {precpred(_ctx, N)}?
-     */
-    private List<Integer> extractPrecedenceLevels(Rule rule) {
-        List<Integer> levels = new ArrayList<>();
-
-        if (rule.ast == null) {
-            return levels;
-        }
-
-        String astString = rule.ast.toStringTree();
-        Pattern pattern = Pattern.compile("precpred\\([^,]+,\\s*(\\d+)\\s*\\)");
-        Matcher matcher = pattern.matcher(astString);
-
-        while (matcher.find()) {
-            try {
-                int level = Integer.parseInt(matcher.group(1));
-                if (!levels.contains(level)) {
-                    levels.add(level);
-                }
-            } catch (NumberFormatException e) {
-                log.warn("Failed to parse precedence level: {}", matcher.group(1));
-            }
-        }
-
-        Collections.sort(levels);
-        return levels;
-    }
-
-    /**
-     * Fallback method for full grammar compilation when GrammarInterpreter fails.
-     * This uses the same approach as the old GrammarLoader.loadGrammar().
-     */
-    private Grammar loadGrammarWithFullCompilation(String grammarText) {
-        try {
-            String grammarName = GrammarNameExtractor.extractGrammarName(grammarText);
-            if (grammarName == null) {
-                log.error("Could not extract grammar name from grammar text");
-                return null;
-            }
-
-            // Create temporary file for ANTLR processing
-            Path tempDir = Files.createTempDirectory("antlr-grammar-leftrecursion-");
-            Path tempFile = tempDir.resolve(grammarName + ".g4");
-            Files.writeString(tempFile, grammarText);
-
-            try {
-                // Load grammar using ANTLR Tool (full compilation)
-                Tool tool = new Tool();
-                tool.errMgr.setFormat("antlr");
-                tool.outputDirectory = tempDir.toString();
-                tool.inputDirectory = tempFile.getParent().toFile();
-                Grammar grammar = tool.loadGrammar(tempFile.toString());
-
-                if (grammar != null) {
-                    // Process grammar for complete analysis
-                    tool.process(grammar, false);
-                    log.debug("Successfully loaded and processed grammar with full compilation: {}", grammarName);
-                } else {
-                    log.error("Failed to load grammar with full compilation: {}", grammarName);
-                }
-
-                return grammar;
-
-            } finally {
-                // Cleanup temporary files
-                FileSystemUtils.deleteDirectoryRecursively(tempDir.toFile());
-            }
 
         } catch (Exception e) {
-            log.error("Failed to load grammar with full compilation", e);
-            return null;
+            log.error("Error analyzing left recursion", e);
+            return LeftRecursionReport.error("Analysis failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Check if a rule is directly left-recursive (A -> A α)
+     */
+    private boolean isDirectLeftRecursive(Grammar grammar, Rule rule) {
+        if (grammar.atn == null) return false;
+        
+        ATN atn = grammar.atn;
+        RuleStartState startState = atn.ruleToStartState[rule.index];
+        
+        // Check if any transition from start leads directly back to the same rule
+        Set<ATNState> visited = new HashSet<>();
+        Queue<ATNState> queue = new LinkedList<>();
+        queue.add(startState);
+        
+        while (!queue.isEmpty()) {
+            ATNState state = queue.poll();
+            if (visited.contains(state)) continue;
+            visited.add(state);
+            
+            for (int i = 0; i < state.getNumberOfTransitions(); i++) {
+                Transition t = state.transition(i);
+                
+                if (t instanceof RuleTransition) {
+                    RuleTransition rt = (RuleTransition) t;
+                    if (rt.ruleIndex == rule.index) {
+                        return true; // Direct self-reference
+                    }
+                } else if (t.isEpsilon()) {
+                    // Only follow epsilon transitions (skip optional elements)
+                    queue.add(t.target);
+                }
+                // Stop at non-epsilon terminals - those would make it non-left-recursive
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Detect recursion cycles in the grammar.
+     */
+    private List<Set<String>> detectRecursionCycles(Grammar grammar) {
+        List<Set<String>> cycles = new ArrayList<>();
+        ATN atn = grammar.atn;
+        
+        for (RuleStartState startState : atn.ruleToStartState) {
+            if (startState == null) continue;
+            
+            Set<RuleStartState> rulesVisited = new HashSet<>();
+            rulesVisited.add(startState);
+            
+            Set<String> cycleRules = new LinkedHashSet<>();
+            if (checkForCycle(grammar, startState, rulesVisited, cycleRules, new HashSet<>())) {
+                if (!cycleRules.isEmpty() && !containsCycle(cycles, cycleRules)) {
+                    cycles.add(cycleRules);
+                }
+            }
+        }
+        
+        return cycles;
+    }
+
+    private boolean checkForCycle(Grammar grammar, ATNState state, 
+                                   Set<RuleStartState> rulesVisited,
+                                   Set<String> cycleRules,
+                                   Set<ATNState> statesVisited) {
+        if (state instanceof RuleStopState) return false;
+        if (statesVisited.contains(state)) return false;
+        statesVisited.add(state);
+        
+        boolean foundCycle = false;
+        
+        for (int i = 0; i < state.getNumberOfTransitions(); i++) {
+            Transition t = state.transition(i);
+            
+            if (t instanceof RuleTransition) {
+                RuleTransition rt = (RuleTransition) t;
+                RuleStartState targetStart = (RuleStartState) t.target;
+                
+                if (rulesVisited.contains(targetStart)) {
+                    // Found a cycle
+                    cycleRules.add(grammar.getRule(rt.ruleIndex).name);
+                    foundCycle = true;
+                } else {
+                    rulesVisited.add(targetStart);
+                    if (checkForCycle(grammar, t.target, rulesVisited, cycleRules, new HashSet<>())) {
+                        cycleRules.add(grammar.getRule(state.ruleIndex).name);
+                        foundCycle = true;
+                    }
+                    rulesVisited.remove(targetStart);
+                }
+            } else if (t.isEpsilon()) {
+                if (checkForCycle(grammar, t.target, rulesVisited, cycleRules, statesVisited)) {
+                    foundCycle = true;
+                }
+            }
+        }
+        
+        return foundCycle;
+    }
+
+    private boolean containsCycle(List<Set<String>> cycles, Set<String> newCycle) {
+        for (Set<String> existing : cycles) {
+            if (existing.equals(newCycle)) return true;
+        }
+        return false;
+    }
+
+    private List<Integer> toList(int[] array) {
+        if (array == null) return Collections.emptyList();
+        List<Integer> list = new ArrayList<>();
+        for (int i : array) {
+            list.add(i);
+        }
+        return list;
     }
 }
+

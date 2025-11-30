@@ -2,10 +2,8 @@ package com.github.sshailabh.antlr4mcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.sshailabh.antlr4mcp.model.ValidationResult;
-import com.github.sshailabh.antlr4mcp.service.RuntimeAmbiguityDetector;
-import com.github.sshailabh.antlr4mcp.service.ErrorTransformer;
+import com.github.sshailabh.antlr4mcp.service.AmbiguityDetector;
 import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
-import com.github.sshailabh.antlr4mcp.service.GrammarInterpreter;
 import com.github.sshailabh.antlr4mcp.tools.DetectAmbiguityTool;
 import com.github.sshailabh.antlr4mcp.tools.ParseSampleTool;
 import com.github.sshailabh.antlr4mcp.tools.ValidateGrammarTool;
@@ -35,25 +33,16 @@ public class McpServerIntegrationTest {
     private GrammarCompiler grammarCompiler;
 
     @Autowired
-    private GrammarInterpreter grammarInterpreter;
-
-    @Autowired
-    private ErrorTransformer errorTransformer;
-
-    @Autowired
-    private RuntimeAmbiguityDetector runtimeAmbiguityDetector;
-
-    // TreeVisualizer removed - no longer needed
+    private AmbiguityDetector ambiguityDetector;
 
     @Autowired
     private ObjectMapper objectMapper;
 
     @Test
     public void testMcpServerBuilds() {
-        // Test with core essential tools only
-        ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarInterpreter, errorTransformer, objectMapper);
-        ParseSampleTool parseSampleTool = new ParseSampleTool(grammarInterpreter, errorTransformer, objectMapper);
-        DetectAmbiguityTool detectAmbiguityTool = new DetectAmbiguityTool(runtimeAmbiguityDetector, objectMapper);
+        ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarCompiler, objectMapper);
+        ParseSampleTool parseSampleTool = new ParseSampleTool(grammarCompiler, objectMapper);
+        DetectAmbiguityTool detectAmbiguityTool = new DetectAmbiguityTool(ambiguityDetector, objectMapper);
 
         var jsonMapper = new JacksonMcpJsonMapper(objectMapper);
         InputStream mockInput = new ByteArrayInputStream("".getBytes(StandardCharsets.UTF_8));
@@ -74,10 +63,9 @@ public class McpServerIntegrationTest {
 
     @Test
     public void testToolSchemas() {
-        // Test core essential tools only
-        ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarInterpreter, errorTransformer, objectMapper);
-        ParseSampleTool parseSampleTool = new ParseSampleTool(grammarInterpreter, errorTransformer, objectMapper);
-        DetectAmbiguityTool detectAmbiguityTool = new DetectAmbiguityTool(runtimeAmbiguityDetector, objectMapper);
+        ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarCompiler, objectMapper);
+        ParseSampleTool parseSampleTool = new ParseSampleTool(grammarCompiler, objectMapper);
+        DetectAmbiguityTool detectAmbiguityTool = new DetectAmbiguityTool(ambiguityDetector, objectMapper);
 
         McpSchema.Tool validateTool = validateGrammarTool.toTool();
         assertNotNull(validateTool);
@@ -96,7 +84,7 @@ public class McpServerIntegrationTest {
 
     @Test
     public void testValidateGrammarToolExecution() throws Exception {
-        ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarInterpreter, errorTransformer, objectMapper);
+        ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarCompiler, objectMapper);
 
         String validGrammar = "grammar Test; start: 'hello' 'world';";
 
@@ -121,7 +109,7 @@ public class McpServerIntegrationTest {
 
     @Test
     public void testValidateGrammarToolWithInvalidGrammar() throws Exception {
-        ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarInterpreter, errorTransformer, objectMapper);
+        ValidateGrammarTool validateGrammarTool = new ValidateGrammarTool(grammarCompiler, objectMapper);
 
         String invalidGrammar = "grammar Test; start: undefinedRule;";
 

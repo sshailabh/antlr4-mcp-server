@@ -1,8 +1,6 @@
 package com.github.sshailabh.antlr4mcp.codegen;
 
 import com.github.sshailabh.antlr4mcp.model.GrammarError;
-import com.github.sshailabh.antlr4mcp.util.FileSystemUtils;
-import com.github.sshailabh.antlr4mcp.util.GrammarNameExtractor;
 import lombok.extern.slf4j.Slf4j;
 import org.antlr.v4.Tool;
 import org.antlr.v4.tool.ANTLRMessage;
@@ -46,10 +44,7 @@ public class MultiTargetCompiler {
 
             // Determine grammar name
             if (grammarName == null) {
-                grammarName = GrammarNameExtractor.extractGrammarName(grammarText);
-                if (grammarName == null) {
-                    grammarName = "Grammar"; // fallback for compatibility
-                }
+                grammarName = extractGrammarName(grammarText);
             }
 
             // Write grammar file
@@ -93,7 +88,7 @@ public class MultiTargetCompiler {
             // Cleanup temp directory
             if (tempDir != null) {
                 try {
-                    FileSystemUtils.deleteDirectoryRecursively(tempDir);
+                    deleteDirectory(tempDir);
                 } catch (IOException e) {
                     log.warn("Failed to cleanup temp directory: {}", tempDir, e);
                 }
@@ -201,7 +196,39 @@ public class MultiTargetCompiler {
         return "other";
     }
 
+    /**
+     * Extract grammar name from grammar text
+     */
+    private String extractGrammarName(String grammarText) {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+            "(?:lexer\\s+grammar|parser\\s+grammar|grammar)\\s+([A-Za-z][A-Za-z0-9_]*)\\s*;"
+        );
+        java.util.regex.Matcher matcher = pattern.matcher(grammarText);
 
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        return "Grammar";
+    }
+
+    /**
+     * Delete directory recursively
+     */
+    private void deleteDirectory(Path directory) throws IOException {
+        if (Files.exists(directory)) {
+            try (Stream<Path> paths = Files.walk(directory)) {
+                paths.sorted(java.util.Comparator.reverseOrder())
+                     .forEach(path -> {
+                         try {
+                             Files.delete(path);
+                         } catch (IOException e) {
+                             log.warn("Failed to delete: {}", path, e);
+                         }
+                     });
+            }
+        }
+    }
 
     /**
      * Error listener for ANTLR Tool compilation

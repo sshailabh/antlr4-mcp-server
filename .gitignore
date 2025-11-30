@@ -20,6 +20,7 @@ buildNumber.properties
 
 # Claude
 .claude/
+Claude.md
 
 # VS Code
 .vscode/
@@ -35,6 +36,7 @@ buildNumber.properties
 
 # Logs
 *.log
+logs/
 
 # Temporary files
 *.tmp

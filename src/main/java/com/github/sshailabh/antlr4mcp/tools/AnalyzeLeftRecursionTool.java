@@ -1,7 +1,7 @@
 package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.sshailabh.antlr4mcp.model.LeftRecursionAnalysis;
+import com.github.sshailabh.antlr4mcp.model.LeftRecursionReport;
 import com.github.sshailabh.antlr4mcp.service.LeftRecursionAnalyzer;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -9,57 +9,57 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
- * MCP tool for analyzing left-recursion in ANTLR4 grammars.
- * Identifies left-recursive rules and provides details about ANTLR's
- * automatic transformation process.
+ * MCP Tool for analyzing left recursion in ANTLR4 grammars.
+ * 
+ * Left recursion is a common pattern where a rule references itself
+ * as its leftmost symbol. ANTLR4 automatically transforms left-recursive
+ * rules, but understanding these patterns helps with:
+ * - Grammar debugging
+ * - Performance optimization
+ * - Understanding precedence handling
+ * 
+ * This tool detects both direct (A -> A α) and indirect (A -> B, B -> A)
+ * left recursion patterns.
  */
 @Slf4j
 @RequiredArgsConstructor
 public class AnalyzeLeftRecursionTool {
 
-    private final LeftRecursionAnalyzer analyzer;
+    private final LeftRecursionAnalyzer leftRecursionAnalyzer;
     private final ObjectMapper objectMapper;
 
-    /**
-     * Build MCP tool schema definition.
-     */
     public McpSchema.Tool toTool() {
-        return McpSchema.Tool.builder()
-                .name("analyze_left_recursion")
-                .description("Analyzes left-recursion patterns in an ANTLR4 grammar. " +
-                           "Identifies left-recursive rules, detects ANTLR's automatic transformations, " +
-                           "and extracts precedence levels from transformed rules.")
-                .inputSchema(getInputSchema())
-                .build();
-    }
-
-    /**
-     * Define input schema for the tool.
-     */
-    private McpSchema.JsonSchema getInputSchema() {
         Map<String, Object> properties = new HashMap<>();
 
         Map<String, Object> grammarText = new HashMap<>();
         grammarText.put("type", "string");
-        grammarText.put("description", "Complete ANTLR4 grammar content to analyze");
+        grammarText.put("description", "Complete ANTLR4 grammar text to analyze for left recursion");
         properties.put("grammar_text", grammarText);
 
-        return new McpSchema.JsonSchema(
-                "object",
-                properties,
-                java.util.List.of("grammar_text"),
-                null,
-                null,
-                null
+        McpSchema.JsonSchema schema = new McpSchema.JsonSchema(
+            "object",
+            properties,
+            List.of("grammar_text"),
+            null,
+            null,
+            null
         );
+
+        return McpSchema.Tool.builder()
+            .name("analyze_left_recursion")
+            .description("Analyze left recursion patterns in an ANTLR4 grammar. " +
+                "Detects direct left recursion (A -> A α) and indirect cycles. " +
+                "Returns information about how ANTLR4 transforms recursive rules, " +
+                "which helps understand precedence handling and optimize grammar performance. " +
+                "Essential for compiler engineers debugging expression grammars.")
+            .inputSchema(schema)
+            .build();
     }
 
-    /**
-     * Execute left-recursion analysis.
-     */
     public McpSchema.CallToolResult execute(McpSyncServerExchange exchange, McpSchema.CallToolRequest request) {
         try {
             @SuppressWarnings("unchecked")
@@ -67,44 +67,27 @@ public class AnalyzeLeftRecursionTool {
 
             String grammarText = (String) arguments.get("grammar_text");
 
-            log.info("analyze_left_recursion invoked, grammar size: {} bytes",
-                    grammarText != null ? grammarText.length() : 0);
+            log.info("analyze_left_recursion invoked, grammar size: {} bytes", grammarText.length());
 
-            // Perform left-recursion analysis
-            LeftRecursionAnalysis analysis = analyzer.analyze(grammarText);
+            LeftRecursionReport report = leftRecursionAnalyzer.analyze(grammarText);
 
-            // Serialize result to JSON
-            String jsonResult = objectMapper.writeValueAsString(analysis);
-            return new McpSchema.CallToolResult(jsonResult, false);
+            String jsonResult = objectMapper.writerWithDefaultPrettyPrinter()
+                .writeValueAsString(report);
+            return new McpSchema.CallToolResult(jsonResult, !report.isSuccess());
 
-        } catch (IllegalArgumentException e) {
-            log.error("Invalid input for left-recursion analysis", e);
-            return createErrorResult("invalid_input", e.getMessage());
         } catch (Exception e) {
             log.error("analyze_left_recursion failed", e);
-            return createErrorResult("analysis_error",
-                e.getMessage() != null ? e.getMessage() : "Failed to analyze left-recursion");
-        }
-    }
-
-    /**
-     * Create error result with consistent structure.
-     */
-    private McpSchema.CallToolResult createErrorResult(String errorType, String message) {
-        try {
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("error", errorType);
-            errorResult.put("message", message);
-
-            String jsonResult = objectMapper.writeValueAsString(errorResult);
-            return new McpSchema.CallToolResult(jsonResult, true);
-        } catch (Exception ex) {
-            log.error("Failed to serialize error", ex);
-            return new McpSchema.CallToolResult(
-                    "{\"error\":\"internal_error\",\"message\":\"" +
-                    (ex.getMessage() != null ? ex.getMessage().replace("\"", "\\\"") : "Internal error") + "\"}",
+            try {
+                LeftRecursionReport errorReport = LeftRecursionReport.error("Tool execution failed: " + e.getMessage());
+                String jsonResult = objectMapper.writeValueAsString(errorReport);
+                return new McpSchema.CallToolResult(jsonResult, true);
+            } catch (Exception ex) {
+                return new McpSchema.CallToolResult(
+                    "{\"success\":false,\"error\":\"Internal error: " + ex.getMessage() + "\"}",
                     true
-            );
+                );
+            }
         }
     }
 }
+

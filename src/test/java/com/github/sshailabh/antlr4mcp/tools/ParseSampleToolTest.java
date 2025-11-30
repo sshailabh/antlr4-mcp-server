@@ -1,16 +1,14 @@
 package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.sshailabh.antlr4mcp.analysis.EmbeddedCodeAnalyzer;
 import com.github.sshailabh.antlr4mcp.model.ParseResult;
-import com.github.sshailabh.antlr4mcp.service.ErrorSuggestions;
-import com.github.sshailabh.antlr4mcp.service.ErrorTransformer;
-import com.github.sshailabh.antlr4mcp.service.GrammarInterpreter;
-import com.github.sshailabh.antlr4mcp.service.ParseTimeoutManager;
+import com.github.sshailabh.antlr4mcp.security.SecurityValidator;
+import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,22 +22,18 @@ import static org.mockito.Mockito.mock;
 class ParseSampleToolTest {
 
     private ParseSampleTool parseSampleTool;
-    private GrammarInterpreter grammarInterpreter;
-    private ErrorTransformer errorTransformer;
+    private GrammarCompiler grammarCompiler;
     private ObjectMapper objectMapper;
     private McpSyncServerExchange mockExchange;
 
     @BeforeEach
     void setUp() {
-        EmbeddedCodeAnalyzer embeddedCodeAnalyzer = new EmbeddedCodeAnalyzer();
-        ParseTimeoutManager timeoutManager = new ParseTimeoutManager();
-        grammarInterpreter = new GrammarInterpreter(embeddedCodeAnalyzer, timeoutManager);
-
-        ErrorSuggestions errorSuggestions = new ErrorSuggestions();
-        errorTransformer = new ErrorTransformer(errorSuggestions);
+        SecurityValidator securityValidator = new SecurityValidator();
+        grammarCompiler = new GrammarCompiler(securityValidator);
+        ReflectionTestUtils.setField(grammarCompiler, "maxGrammarSizeMb", 10);
 
         objectMapper = new ObjectMapper();
-        parseSampleTool = new ParseSampleTool(grammarInterpreter, errorTransformer, objectMapper);
+        parseSampleTool = new ParseSampleTool(grammarCompiler, objectMapper);
         mockExchange = mock(McpSyncServerExchange.class);
     }
 
@@ -54,7 +48,7 @@ class ParseSampleToolTest {
         assertNotNull(tool);
         assertEquals("parse_sample", tool.name());
         assertNotNull(tool.description());
-        assertTrue(tool.description().contains("Parses sample input"));
+        assertTrue(tool.description().contains("Parse input"));
         assertNotNull(tool.inputSchema());
     }
 

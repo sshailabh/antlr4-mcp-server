@@ -84,8 +84,7 @@ class AtnVisualizerIntegrationTest {
         assertTrue(result.getStateCount() > 0, "Should have states");
         assertTrue(result.getTransitionCount() > 0, "Should have transitions");
         assertNotNull(result.getDotFormat(), "DOT format should not be null");
-        // Phase 1: Mermaid format deferred to later phases
-        assertNull(result.getMermaidFormat(), "Mermaid format should be null in Phase 1");
+        assertNotNull(result.getMermaidFormat(), "Mermaid format should not be null");
     }
 
     @Test
@@ -101,10 +100,14 @@ class AtnVisualizerIntegrationTest {
 
         // Verify DOT format structure
         String dot = result.getDotFormat();
-        assertTrue(dot.contains("digraph") || dot.contains("->"), "DOT should have graph structure");
+        assertTrue(dot.contains("digraph ATN_expr"), "DOT should have proper header");
+        assertTrue(dot.contains("rankdir=LR"), "Should specify layout direction");
+        assertTrue(dot.contains("->"), "Should have transitions");
 
-        // Phase 1: Mermaid format deferred to later phases
-        assertNull(result.getMermaidFormat(), "Mermaid format should be null in Phase 1");
+        // Verify Mermaid format
+        String mermaid = result.getMermaidFormat();
+        assertTrue(mermaid.contains("stateDiagram-v2"), "Mermaid should have proper header");
+        assertTrue(mermaid.contains("-->"), "Should have state transitions");
     }
 
     @Test
@@ -134,23 +137,42 @@ class AtnVisualizerIntegrationTest {
 
         String dot = result.getDotFormat();
 
-        // Phase 1: Using ANTLR's official DOTGenerator
-        // Check basic structure - less strict assertions for official generator output
-        assertTrue(dot.contains("digraph"), "Should contain digraph declaration");
-        assertTrue(dot.contains("->"), "Should contain transitions");
-        assertTrue(dot.endsWith("}") || dot.endsWith("}\n"), "Should end with closing brace");
+        // Check structure
+        assertTrue(dot.startsWith("digraph"), "Should start with digraph");
+        assertTrue(dot.endsWith("}\n"), "Should end with closing brace");
+        assertTrue(dot.contains("node ["), "Should define node attributes");
+        assertTrue(dot.contains("edge ["), "Should define edge attributes");
 
-        // Verify we have some content
-        assertTrue(dot.length() > 50, "DOT output should have substantial content");
+        // Check state declarations
+        int stateCount = result.getStateCount();
+        for (int i = 0; i < stateCount; i++) {
+            assertTrue(dot.contains("s" + i),
+                "Should contain state s" + i);
+        }
+
+        // Check transitions
         assertTrue(result.getTransitionCount() > 0, "Should have transitions");
     }
 
-    // Phase 1: Mermaid format deferred to later phases
-    // @Test
-    // @DisplayName("Verify Mermaid format correctness")
-    // void testMermaidFormatCorrectness() {
-    //     // Mermaid format will be re-implemented in Phase 2/3
-    // }
+    @Test
+    @DisplayName("Verify Mermaid format correctness")
+    void testMermaidFormatCorrectness() throws Exception {
+        Grammar grammar = grammarCompiler.loadGrammar(expressionGrammar);
+        AtnVisualization result = atnVisualizer.visualize(grammar, "expr");
+
+        String mermaid = result.getMermaidFormat();
+
+        // Check structure
+        assertTrue(mermaid.startsWith("stateDiagram-v2"),
+            "Should start with stateDiagram-v2");
+        assertTrue(mermaid.contains("[*]"), "Should have start/end states");
+
+        // Count transitions
+        long transitionCount = mermaid.lines()
+            .filter(line -> line.contains("-->"))
+            .count();
+        assertTrue(transitionCount > 0, "Should have transitions");
+    }
 
     @Test
     @DisplayName("Handle invalid rule name")

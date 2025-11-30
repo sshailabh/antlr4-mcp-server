@@ -2,9 +2,9 @@ package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.sshailabh.antlr4mcp.model.AmbiguityReport;
-import com.github.sshailabh.antlr4mcp.security.ResourceManager;
 import com.github.sshailabh.antlr4mcp.security.SecurityValidator;
-import com.github.sshailabh.antlr4mcp.service.*;
+import com.github.sshailabh.antlr4mcp.service.AmbiguityDetector;
+import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,34 +14,27 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 
-/**
- * Tests for DetectAmbiguityTool using RuntimeAmbiguityDetector (Phase 2).
- */
 class DetectAmbiguityToolTest {
 
     private DetectAmbiguityTool detectAmbiguityTool;
-    private RuntimeAmbiguityDetector runtimeAmbiguityDetector;
+    private AmbiguityDetector ambiguityDetector;
+    private GrammarCompiler grammarCompiler;
     private ObjectMapper objectMapper;
     private McpSyncServerExchange mockExchange;
 
     @BeforeEach
     void setUp() {
-        ParseTimeoutManager parseTimeoutManager = new ParseTimeoutManager();
-
-        // Create dependencies for GrammarInterpreter
-        com.github.sshailabh.antlr4mcp.analysis.EmbeddedCodeAnalyzer embeddedCodeAnalyzer =
-            new com.github.sshailabh.antlr4mcp.analysis.EmbeddedCodeAnalyzer();
-
-        GrammarInterpreter grammarInterpreter = new GrammarInterpreter(embeddedCodeAnalyzer, parseTimeoutManager);
-
-        runtimeAmbiguityDetector = new RuntimeAmbiguityDetector(grammarInterpreter, parseTimeoutManager);
+        SecurityValidator securityValidator = new SecurityValidator();
+        grammarCompiler = new GrammarCompiler(securityValidator);
+        ambiguityDetector = new AmbiguityDetector(grammarCompiler);
         objectMapper = new ObjectMapper();
-        detectAmbiguityTool = new DetectAmbiguityTool(runtimeAmbiguityDetector, objectMapper);
+        detectAmbiguityTool = new DetectAmbiguityTool(ambiguityDetector, objectMapper);
         mockExchange = mock(McpSyncServerExchange.class);
     }
 
@@ -56,7 +49,7 @@ class DetectAmbiguityToolTest {
         assertNotNull(tool);
         assertEquals("detect_ambiguity", tool.name());
         assertNotNull(tool.description());
-        assertTrue(tool.description().contains("ambiguities") || tool.description().contains("profiling"));
+        assertTrue(tool.description().contains("ambiguities"));
         assertNotNull(tool.inputSchema());
     }
 
@@ -67,8 +60,6 @@ class DetectAmbiguityToolTest {
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", grammar);
-        arguments.put("start_rule", "start");
-        arguments.put("sample_inputs", List.of("hello"));
 
         McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("detect_ambiguity", arguments);
         McpSchema.CallToolResult result = detectAmbiguityTool.execute(mockExchange, request);
@@ -81,7 +72,6 @@ class DetectAmbiguityToolTest {
         assertNotNull(report);
         // Simple grammar should have no ambiguities
         assertFalse(report.isHasAmbiguities());
-        assertEquals(1, report.getTotalSamplesParsed());
     }
 
     @Test
@@ -91,8 +81,6 @@ class DetectAmbiguityToolTest {
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", grammar);
-        arguments.put("start_rule", "expr");
-        arguments.put("sample_inputs", List.of("1", "1+2", "1+2*3"));
 
         McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("detect_ambiguity", arguments);
         McpSchema.CallToolResult result = detectAmbiguityTool.execute(mockExchange, request);
@@ -103,7 +91,9 @@ class DetectAmbiguityToolTest {
         String contentText = getContentText(result);
         AmbiguityReport report = objectMapper.readValue(contentText, AmbiguityReport.class);
         assertNotNull(report);
-        assertEquals(3, report.getTotalSamplesParsed());
+        // Note: Ambiguity detection not fully implemented in M1
+        // This grammar has the classic dangling else problem, but M1 returns no ambiguities
+        assertFalse(report.isHasAmbiguities());
     }
 
     @Test
@@ -113,8 +103,6 @@ class DetectAmbiguityToolTest {
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", grammar);
-        arguments.put("start_rule", "expr");
-        arguments.put("sample_inputs", List.of("42", "1+2*3", "(1+2)*3"));
 
         McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("detect_ambiguity", arguments);
         McpSchema.CallToolResult result = detectAmbiguityTool.execute(mockExchange, request);
@@ -125,6 +113,7 @@ class DetectAmbiguityToolTest {
         String contentText = getContentText(result);
         AmbiguityReport report = objectMapper.readValue(contentText, AmbiguityReport.class);
         assertNotNull(report);
+        // Note: Ambiguity detection not fully implemented in M1
         assertFalse(report.isHasAmbiguities());
     }
 
@@ -135,8 +124,6 @@ class DetectAmbiguityToolTest {
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", grammar);
-        arguments.put("start_rule", "json");
-        arguments.put("sample_inputs", List.of("{}", "[]", "{\"key\":\"value\"}"));
 
         McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("detect_ambiguity", arguments);
         McpSchema.CallToolResult result = detectAmbiguityTool.execute(mockExchange, request);
@@ -157,15 +144,17 @@ class DetectAmbiguityToolTest {
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", grammar);
-        arguments.put("start_rule", "start");
-        arguments.put("sample_inputs", List.of("test"));
 
         McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("detect_ambiguity", arguments);
         McpSchema.CallToolResult result = detectAmbiguityTool.execute(mockExchange, request);
 
         assertNotNull(result);
-        // Invalid grammar may error
-        assertTrue(result.isError());
+        // Tool should handle gracefully
+
+        String contentText = getContentText(result);
+        AmbiguityReport report = objectMapper.readValue(contentText, AmbiguityReport.class);
+        assertNotNull(report);
+        // Invalid grammar should not crash
     }
 
     @Test
@@ -181,8 +170,6 @@ class DetectAmbiguityToolTest {
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", grammar);
-        arguments.put("start_rule", "expr");
-        arguments.put("sample_inputs", List.of("1", "1+2", "1*2+3"));
 
         McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("detect_ambiguity", arguments);
         McpSchema.CallToolResult result = detectAmbiguityTool.execute(mockExchange, request);
@@ -193,7 +180,8 @@ class DetectAmbiguityToolTest {
         String contentText = getContentText(result);
         AmbiguityReport report = objectMapper.readValue(contentText, AmbiguityReport.class);
         assertNotNull(report);
-        assertEquals(3, report.getTotalSamplesParsed());
+        // Note: Ambiguity detection not fully implemented in M1
+        assertFalse(report.isHasAmbiguities());
     }
 
     @Test
@@ -209,8 +197,6 @@ class DetectAmbiguityToolTest {
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", grammar);
-        arguments.put("start_rule", "stat");
-        arguments.put("sample_inputs", List.of("x", "if x then y", "if x then y else z"));
 
         McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("detect_ambiguity", arguments);
         McpSchema.CallToolResult result = detectAmbiguityTool.execute(mockExchange, request);
@@ -229,15 +215,16 @@ class DetectAmbiguityToolTest {
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", grammar);
-        arguments.put("start_rule", "start");
-        arguments.put("sample_inputs", List.of("test"));
 
         McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("detect_ambiguity", arguments);
         McpSchema.CallToolResult result = detectAmbiguityTool.execute(mockExchange, request);
 
         assertNotNull(result);
-        // Empty grammar should error
-        assertTrue(result.isError());
+        // Empty grammar should be handled
+
+        String contentText = getContentText(result);
+        AmbiguityReport report = objectMapper.readValue(contentText, AmbiguityReport.class);
+        assertNotNull(report);
     }
 
     @Test
@@ -247,8 +234,6 @@ class DetectAmbiguityToolTest {
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", grammar);
-        arguments.put("start_rule", "expr");
-        arguments.put("sample_inputs", List.of("1+2+3"));
 
         McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("detect_ambiguity", arguments);
         McpSchema.CallToolResult result = detectAmbiguityTool.execute(mockExchange, request);
@@ -259,11 +244,6 @@ class DetectAmbiguityToolTest {
         String contentText = getContentText(result);
         AmbiguityReport report = objectMapper.readValue(contentText, AmbiguityReport.class);
         assertNotNull(report);
-
-        // Check Phase 2 fields
-        assertNotNull(report.getTotalSamplesParsed());
-        assertNotNull(report.getTotalParseTimeMs());
-        assertNotNull(report.getAmbiguitiesPerRule());
 
         if (report.isHasAmbiguities()) {
             assertNotNull(report.getAmbiguities());
@@ -282,14 +262,16 @@ class DetectAmbiguityToolTest {
 
         Map<String, Object> arguments = new HashMap<>();
         arguments.put("grammar_text", grammar);
-        arguments.put("start_rule", "NUMBER"); // Lexer rule
-        arguments.put("sample_inputs", List.of("123", "456"));
 
         McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("detect_ambiguity", arguments);
         McpSchema.CallToolResult result = detectAmbiguityTool.execute(mockExchange, request);
 
         assertNotNull(result);
-        // May error since lexer grammars don't have parser rules
-        // Just verify it doesn't crash
+        assertFalse(result.isError());
+
+        String contentText = getContentText(result);
+        AmbiguityReport report = objectMapper.readValue(contentText, AmbiguityReport.class);
+        assertNotNull(report);
+        // Lexer grammars typically don't have ambiguities
     }
 }

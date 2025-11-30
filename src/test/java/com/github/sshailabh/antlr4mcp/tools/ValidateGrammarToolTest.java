@@ -1,269 +1,187 @@
 package com.github.sshailabh.antlr4mcp.tools;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.sshailabh.antlr4mcp.analysis.EmbeddedCodeAnalyzer;
 import com.github.sshailabh.antlr4mcp.model.ValidationResult;
-import com.github.sshailabh.antlr4mcp.service.ErrorSuggestions;
-import com.github.sshailabh.antlr4mcp.service.ErrorTransformer;
-import com.github.sshailabh.antlr4mcp.service.GrammarInterpreter;
-import com.github.sshailabh.antlr4mcp.service.ParseTimeoutManager;
-import io.modelcontextprotocol.server.McpSyncServerExchange;
+import com.github.sshailabh.antlr4mcp.security.SecurityValidator;
+import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
+import com.github.sshailabh.antlr4mcp.support.AbstractToolTest;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.test.util.ReflectionTestUtils;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Map;
-
+import static com.github.sshailabh.antlr4mcp.support.GrammarFixtures.*;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.mock;
 
-class ValidateGrammarToolTest {
+/**
+ * Production-grade tests for ValidateGrammarTool.
+ */
+@DisplayName("ValidateGrammarTool Tests")
+class ValidateGrammarToolTest extends AbstractToolTest {
 
-    private ValidateGrammarTool validateGrammarTool;
-    private GrammarInterpreter grammarInterpreter;
-    private ErrorTransformer errorTransformer;
-
-    private ObjectMapper objectMapper;
-    private McpSyncServerExchange mockExchange;
+    private ValidateGrammarTool tool;
+    private GrammarCompiler grammarCompiler;
 
     @BeforeEach
-    void setUp() {
-        EmbeddedCodeAnalyzer embeddedCodeAnalyzer = new EmbeddedCodeAnalyzer();
-        ParseTimeoutManager timeoutManager = new ParseTimeoutManager();
-        grammarInterpreter = new GrammarInterpreter(embeddedCodeAnalyzer, timeoutManager);
+    @Override
+    public void setUp() {
+        super.setUp();
 
-        ErrorSuggestions errorSuggestions = new ErrorSuggestions();
-        errorTransformer = new ErrorTransformer(errorSuggestions);
+        SecurityValidator securityValidator = new SecurityValidator();
+        grammarCompiler = new GrammarCompiler(securityValidator);
+        ReflectionTestUtils.setField(grammarCompiler, "maxGrammarSizeMb", 10);
 
-        objectMapper = new ObjectMapper();
-        validateGrammarTool = new ValidateGrammarTool(grammarInterpreter, errorTransformer, objectMapper);
-        mockExchange = mock(McpSyncServerExchange.class);
+        tool = new ValidateGrammarTool(grammarCompiler, objectMapper);
     }
 
-    private String getContentText(McpSchema.CallToolResult result) {
-        return ((McpSchema.TextContent) result.content().get(0)).text();
+    // ========== SCHEMA TESTS ==========
+
+    @Test
+    @DisplayName("Should have valid tool schema")
+    void testToolSchema() {
+        assertValidToolSchema(tool.toTool(), "validate_grammar", "grammar_text");
+    }
+
+    // ========== VALID GRAMMAR TESTS ==========
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+        "Simple hello, Hello, 1, 0",
+        "Simple calc, SimpleCalc, 3, 2",
+        "JSON grammar, Json, 5, 3"
+    })
+    @DisplayName("Should validate various grammar types")
+    void testValidateVariousGrammars(String description, String expectedName,
+                                     int expectedParserRules, int expectedLexerRules) throws Exception {
+        String grammar = switch (expectedName) {
+            case "Hello" -> SIMPLE_HELLO;
+            case "SimpleCalc" -> SIMPLE_CALC;
+            case "Json" -> JSON_INLINE;
+            default -> throw new IllegalArgumentException("Unknown grammar: " + expectedName);
+        };
+
+        McpSchema.CallToolResult result = tool.execute(mockExchange,
+            createRequest("validate_grammar", arguments()
+                .withGrammar(grammar)
+                .build()));
+
+        assertToolSuccess(result);
+
+        ValidationResult validation = parseResult(result, ValidationResult.class);
+        assertTrue(validation.isSuccess());
+        assertEquals(expectedName, validation.getGrammarName());
+        assertEquals(expectedParserRules, validation.getParserRules());
+        assertTrue(validation.getLexerRules() >= expectedLexerRules);
     }
 
     @Test
-    void testToTool() {
-        McpSchema.Tool tool = validateGrammarTool.toTool();
-
-        assertNotNull(tool);
-        assertEquals("validate_grammar", tool.name());
-        assertNotNull(tool.description());
-        assertTrue(tool.description().contains("Validates ANTLR4 grammar"));
-        assertNotNull(tool.inputSchema());
-    }
-
-    @Test
-    void testValidateSimpleGrammar() throws Exception {
-        String grammar = "grammar Simple;\n" +
-                        "start : 'hello' ;\n";
-
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammar_text", grammar);
-
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("validate_grammar", arguments);
-        McpSchema.CallToolResult result = validateGrammarTool.execute(mockExchange, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        ValidationResult validationResult = objectMapper.readValue(contentText, ValidationResult.class);
-        assertTrue(validationResult.isSuccess());
-        assertEquals("Simple", validationResult.getGrammarName());
-        assertEquals(1, validationResult.getParserRules());
-        assertEquals(0, validationResult.getLexerRules());
-    }
-
-    @Test
-    void testValidateGrammarFromFile() throws Exception {
-        Path grammarPath = Paths.get("src/test/resources/grammars/SimpleCalc.g4");
-        String grammar = Files.readString(grammarPath);
-
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammar_text", grammar);
-
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("validate_grammar", arguments);
-        McpSchema.CallToolResult result = validateGrammarTool.execute(mockExchange, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        ValidationResult validationResult = objectMapper.readValue(contentText, ValidationResult.class);
-        assertTrue(validationResult.isSuccess());
-        assertEquals("SimpleCalc", validationResult.getGrammarName());
-        assertEquals(3, validationResult.getParserRules());
-        assertEquals(2, validationResult.getLexerRules());
-    }
-
-    @Test
-    void testValidateComplexGrammar() throws Exception {
-        Path grammarPath = Paths.get("src/test/resources/grammars/Json.g4");
-        String grammar = Files.readString(grammarPath);
-
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammar_text", grammar);
-
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("validate_grammar", arguments);
-        McpSchema.CallToolResult result = validateGrammarTool.execute(mockExchange, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        ValidationResult validationResult = objectMapper.readValue(contentText, ValidationResult.class);
-        assertTrue(validationResult.isSuccess());
-        assertEquals("Json", validationResult.getGrammarName());
-        assertEquals(5, validationResult.getParserRules());
-        assertTrue(validationResult.getLexerRules() >= 3);
-    }
-
-    @Test
-    void testValidateInvalidGrammar() throws Exception {
-        String grammar = "grammar Invalid;\n" +
-                        "start : undefined_rule ;\n";
-
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammar_text", grammar);
-
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("validate_grammar", arguments);
-        McpSchema.CallToolResult result = validateGrammarTool.execute(mockExchange, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        ValidationResult validationResult = objectMapper.readValue(contentText, ValidationResult.class);
-        assertFalse(validationResult.isSuccess());
-        assertFalse(validationResult.getErrors().isEmpty());
-    }
-
-    @Test
-    void testValidateGrammarWithExpectedName() throws Exception {
-        String grammar = "grammar Test;\n" +
-                        "start : 'hello' ;\n";
-
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammar_text", grammar);
-        arguments.put("grammar_name", "Test");
-
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("validate_grammar", arguments);
-        McpSchema.CallToolResult result = validateGrammarTool.execute(mockExchange, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        ValidationResult validationResult = objectMapper.readValue(contentText, ValidationResult.class);
-        assertTrue(validationResult.isSuccess());
-        assertEquals("Test", validationResult.getGrammarName());
-    }
-
-    @Test
-    void testValidateGrammarWithWrongExpectedName() throws Exception {
-        String grammar = "grammar Test;\n" +
-                        "start : 'hello' ;\n";
-
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammar_text", grammar);
-        arguments.put("grammar_name", "WrongName");
-
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("validate_grammar", arguments);
-        McpSchema.CallToolResult result = validateGrammarTool.execute(mockExchange, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        ValidationResult validationResult = objectMapper.readValue(contentText, ValidationResult.class);
-        assertFalse(validationResult.isSuccess());
-        assertFalse(validationResult.getErrors().isEmpty());
-        assertTrue(validationResult.getErrors().get(0).getMessage().contains("Expected grammar name"));
-    }
-
-    @Test
-    void testValidateGrammarWithoutDeclaration() throws Exception {
-        String grammar = "start : 'hello' ;";
-
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammar_text", grammar);
-
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("validate_grammar", arguments);
-        McpSchema.CallToolResult result = validateGrammarTool.execute(mockExchange, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        ValidationResult validationResult = objectMapper.readValue(contentText, ValidationResult.class);
-        assertFalse(validationResult.isSuccess());
-    }
-
-    @Test
+    @DisplayName("Should validate lexer-only grammar")
     void testValidateLexerGrammar() throws Exception {
-        Path grammarPath = Paths.get("src/test/resources/grammars/CommonLexer.g4");
-        String grammar = Files.readString(grammarPath);
+        String grammar = GrammarFile.COMMON_LEXER.load();
 
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammar_text", grammar);
+        McpSchema.CallToolResult result = tool.execute(mockExchange,
+            createRequest("validate_grammar", arguments()
+                .withGrammar(grammar)
+                .build()));
 
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("validate_grammar", arguments);
-        McpSchema.CallToolResult result = validateGrammarTool.execute(mockExchange, request);
+        assertToolSuccess(result);
 
-        assertNotNull(result);
-        assertFalse(result.isError());
+        ValidationResult validation = parseResult(result, ValidationResult.class);
+        assertTrue(validation.isSuccess());
+        assertEquals("CommonLexer", validation.getGrammarName());
+        assertEquals(0, validation.getParserRules());
+        assertTrue(validation.getLexerRules() >= 5);
+    }
 
-        String contentText = getContentText(result);
-        ValidationResult validationResult = objectMapper.readValue(contentText, ValidationResult.class);
-        assertTrue(validationResult.isSuccess());
-        assertEquals("CommonLexer", validationResult.getGrammarName());
-        assertEquals(0, validationResult.getParserRules());
-        assertTrue(validationResult.getLexerRules() >= 5);
+    // ========== INVALID GRAMMAR TESTS ==========
+
+    @ParameterizedTest(name = "Invalid: {0}")
+    @ValueSource(strings = {
+        UNDEFINED_RULE,
+        MISSING_SEMICOLON,
+        NO_GRAMMAR_DECLARATION,
+        EMPTY_GRAMMAR
+    })
+    @DisplayName("Should reject invalid grammars")
+    void testInvalidGrammars(String invalidGrammar) throws Exception {
+        McpSchema.CallToolResult result = tool.execute(mockExchange,
+            createRequest("validate_grammar", arguments()
+                .withGrammar(invalidGrammar)
+                .build()));
+
+        assertToolSuccess(result);
+
+        ValidationResult validation = parseResult(result, ValidationResult.class);
+        assertFalse(validation.isSuccess());
+    }
+
+    // ========== GRAMMAR NAME VALIDATION ==========
+
+    @Test
+    @DisplayName("Should validate expected grammar name")
+    void testGrammarNameValidation() throws Exception {
+        // Test matching name
+        McpSchema.CallToolResult result = tool.execute(mockExchange,
+            createRequest("validate_grammar", arguments()
+                .withGrammar(builder().named("Test").withStartRule("'hello'").build())
+                .with("grammar_name", "Test")
+                .build()));
+
+        assertToolSuccess(result);
+        ValidationResult validation = parseResult(result, ValidationResult.class);
+        assertTrue(validation.isSuccess());
+
+        // Test mismatched name
+        result = tool.execute(mockExchange,
+            createRequest("validate_grammar", arguments()
+                .withGrammar(builder().named("Actual").withStartRule("'hello'").build())
+                .with("grammar_name", "Expected")
+                .build()));
+
+        assertToolSuccess(result);
+        validation = parseResult(result, ValidationResult.class);
+        assertFalse(validation.isSuccess());
+        assertTrue(validation.getErrors().get(0).getMessage().contains("Expected grammar name"));
+    }
+
+    // ========== EDGE CASES ==========
+
+    @Test
+    @DisplayName("Should handle left-recursive grammar")
+    void testLeftRecursiveGrammar() throws Exception {
+        McpSchema.CallToolResult result = tool.execute(mockExchange,
+            createRequest("validate_grammar", arguments()
+                .withGrammar(PRECEDENCE_CALC)
+                .build()));
+
+        assertToolSuccess(result);
+
+        ValidationResult validation = parseResult(result, ValidationResult.class);
+        assertTrue(validation.isSuccess());
     }
 
     @Test
-    void testValidateEmptyGrammar() throws Exception {
-        String grammar = "";
+    @DisplayName("Should validate dynamically built grammar")
+    void testDynamicGrammar() throws Exception {
+        String grammar = builder()
+            .named("Dynamic")
+            .withStartRule("expr")
+            .withRule("expr", "'hello'")
+            .withWhitespace()
+            .build();
 
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammar_text", grammar);
+        McpSchema.CallToolResult result = tool.execute(mockExchange,
+            createRequest("validate_grammar", arguments()
+                .withGrammar(grammar)
+                .build()));
 
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("validate_grammar", arguments);
-        McpSchema.CallToolResult result = validateGrammarTool.execute(mockExchange, request);
+        assertToolSuccess(result);
 
-        assertNotNull(result);
-        // Empty grammar should result in error
-        String contentText = getContentText(result);
-        ValidationResult validationResult = objectMapper.readValue(contentText, ValidationResult.class);
-        assertFalse(validationResult.isSuccess());
-    }
-
-    @Test
-    void testValidateGrammarWithSyntaxErrors() throws Exception {
-        String grammar = "grammar Bad;\n" +
-                        "start : 'hello' \n" +  // Missing semicolon
-                        "end : 'world' ;";
-
-        Map<String, Object> arguments = new HashMap<>();
-        arguments.put("grammar_text", grammar);
-
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("validate_grammar", arguments);
-        McpSchema.CallToolResult result = validateGrammarTool.execute(mockExchange, request);
-
-        assertNotNull(result);
-        assertFalse(result.isError());
-
-        String contentText = getContentText(result);
-        ValidationResult validationResult = objectMapper.readValue(contentText, ValidationResult.class);
-        assertFalse(validationResult.isSuccess());
-        assertFalse(validationResult.getErrors().isEmpty());
+        ValidationResult validation = parseResult(result, ValidationResult.class);
+        assertTrue(validation.isSuccess());
+        assertEquals("Dynamic", validation.getGrammarName());
     }
 }

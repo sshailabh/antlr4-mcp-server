@@ -19,21 +19,15 @@ public class ParseResult {
     @Builder.Default
     private List<GrammarError> errors = new ArrayList<>();
 
-    @Builder.Default
-    private List<String> warnings = new ArrayList<>();
-
     public ParseResult() {
         this.errors = new ArrayList<>();
-        this.warnings = new ArrayList<>();
     }
 
-    public ParseResult(boolean success, String tokens, String parseTree, String svg,
-                      List<GrammarError> errors, List<String> warnings) {
+    public ParseResult(boolean success, String tokens, String parseTree, String svg, List<GrammarError> errors) {
         this.success = success;
         this.tokens = tokens;
         this.parseTree = parseTree;
         this.svg = svg;
         this.errors = errors != null ? errors : new ArrayList<>();
-        this.warnings = warnings != null ? warnings : new ArrayList<>();
     }
 }

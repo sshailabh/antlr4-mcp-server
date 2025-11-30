@@ -1,13 +1,21 @@
 spring:
   application:
     name: antlr4-mcp-server
+  main:
+    banner-mode: "off"  # Disable Spring Boot banner
+    log-startup-info: false  # Disable startup logs
 
 logging:
+  file:
+    name: logs/antlr4-mcp-server.log
   level:
     root: INFO
-    com.github.sshailabh.antlr4mcp: DEBUG
+    com.github.sshailabh.antlr4mcp: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    console: ""
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} - %msg%n"
 
 antlr:
   jar-path: /app/libs/antlr-4.13.2-complete.jar
@@ -15,15 +23,6 @@ antlr:
   max-input-size-mb: 1
   max-response-size-kb: 50
   compilation-timeout-seconds: 30
-
-  # Phase 1: Interpreter Mode Configuration
-  parsing-timeout-seconds: 10
-  interpreter:
-    enabled: true
-    cache:
-      max-size: 1000
-      ttl-seconds: 3600
-
   security:
     enabled: true
     validation:

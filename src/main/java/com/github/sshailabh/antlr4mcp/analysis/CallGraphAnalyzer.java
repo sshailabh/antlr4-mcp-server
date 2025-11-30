@@ -1,19 +1,13 @@
 package com.github.sshailabh.antlr4mcp.analysis;
 
-import com.github.sshailabh.antlr4mcp.util.GrammarNameExtractor;
 import lombok.extern.slf4j.Slf4j;
 import org.antlr.v4.Tool;
 import org.antlr.v4.tool.Grammar;
 import org.antlr.v4.tool.Rule;
 import org.antlr.v4.tool.ast.GrammarAST;
-import org.antlr.v4.tool.ast.RuleAST;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Stream;
 
 /**
  * Analyzes grammar call graphs to show rule dependencies and invocation hierarchy
@@ -93,25 +87,23 @@ public class CallGraphAnalyzer {
     }
 
     /**
-     * Load grammar from text using ANTLR Tool.
-     * Note: Tool.loadGrammar() performs additional processing beyond Grammar.load().
+     * Load grammar from text
      */
     private Grammar loadGrammarFromText(String grammarText, Tool tool) {
-        Path tempDir = null;
         try {
-            // Extract grammar name using centralized utility
-            String grammarName = GrammarNameExtractor.extractGrammarName(grammarText);
+            // Extract grammar name
+            String grammarName = extractGrammarName(grammarText);
             if (grammarName == null) {
-                log.error("Could not extract grammar name from content");
+                log.error("Could not extract grammar name");
                 return null;
             }
 
-            // Create temporary file for ANTLR processing
-            tempDir = Files.createTempDirectory("antlr-callgraph-");
-            Path tempFile = tempDir.resolve(grammarName + ".g4");
-            Files.writeString(tempFile, grammarText);
+            // Create temporary file
+            java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("antlr-callgraph-");
+            java.nio.file.Path tempFile = tempDir.resolve(grammarName + ".g4");
+            java.nio.file.Files.writeString(tempFile, grammarText);
 
-            // Load and process grammar
+            // Load grammar from file
             tool.outputDirectory = tempDir.toString();
             tool.inputDirectory = tempFile.getParent().toFile();
             Grammar grammar = tool.loadGrammar(tempFile.toString());
@@ -120,34 +112,40 @@ public class CallGraphAnalyzer {
                 tool.process(grammar, false);
             }
 
+            // Cleanup
+            deleteDirectory(tempDir.toFile());
+
             return grammar;
         } catch (Exception e) {
-            log.error("Failed to load grammar for call graph analysis", e);
+            log.error("Failed to load grammar", e);
             return null;
-        } finally {
-            // Clean up temp directory using NIO for better error handling
-            if (tempDir != null) {
-                cleanupTempDirectory(tempDir);
-            }
         }
     }
 
-    /**
-     * Clean up temporary directory using NIO for proper error handling.
-     * Uses reverse-ordered deletion to handle nested directories.
-     */
-    private void cleanupTempDirectory(Path tempDir) {
-        try (Stream<Path> paths = Files.walk(tempDir)) {
-            paths.sorted(Comparator.reverseOrder())
-                 .forEach(path -> {
-                     try {
-                         Files.deleteIfExists(path);
-                     } catch (IOException e) {
-                         log.warn("Failed to delete temp file: {}", path, e);
-                     }
-                 });
-        } catch (IOException e) {
-            log.warn("Failed to cleanup temp directory: {}", tempDir, e);
+    private String extractGrammarName(String grammarText) {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+            "(lexer\\s+grammar|parser\\s+grammar|grammar)\\s+([A-Za-z][A-Za-z0-9_]*)\\s*;"
+        );
+        java.util.regex.Matcher matcher = pattern.matcher(grammarText);
+        if (matcher.find()) {
+            return matcher.group(2);
+        }
+        return null;
+    }
+
+    private void deleteDirectory(java.io.File directory) {
+        if (directory.exists()) {
+            java.io.File[] files = directory.listFiles();
+            if (files != null) {
+                for (java.io.File file : files) {
+                    if (file.isDirectory()) {
+                        deleteDirectory(file);
+                    } else {
+                        file.delete();
+                    }
+                }
+            }
+            directory.delete();
         }
     }
 
@@ -157,9 +155,16 @@ public class CallGraphAnalyzer {
     private CallGraphNode.RuleType determineRuleType(Rule rule) {
         // Lexer rules start with uppercase
         if (Character.isUpperCase(rule.name.charAt(0))) {
-            // Check if fragment using Rule.isFragment() method (more reliable)
-            if (rule.isFragment()) {
-                return CallGraphNode.RuleType.FRAGMENT;
+            // Check if fragment
+            if (rule.ast != null) {
+                for (Object child : rule.ast.getChildren()) {
+                    if (child instanceof GrammarAST) {
+                        String text = ((GrammarAST) child).getText();
+                        if ("fragment".equals(text)) {
+                            return CallGraphNode.RuleType.FRAGMENT;
+                        }
+                    }
+                }
             }
             return CallGraphNode.RuleType.LEXER;
         }

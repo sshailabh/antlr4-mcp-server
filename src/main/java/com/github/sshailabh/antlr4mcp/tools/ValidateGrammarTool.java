@@ -1,31 +1,21 @@
 package com.github.sshailabh.antlr4mcp.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.sshailabh.antlr4mcp.model.GrammarError;
-import com.github.sshailabh.antlr4mcp.model.InterpreterResult;
 import com.github.sshailabh.antlr4mcp.model.ValidationResult;
-import com.github.sshailabh.antlr4mcp.service.ErrorTransformer;
-import com.github.sshailabh.antlr4mcp.service.GrammarInterpreter;
-
+import com.github.sshailabh.antlr4mcp.service.GrammarCompiler;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.antlr.v4.tool.Grammar;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Slf4j
 @RequiredArgsConstructor
 public class ValidateGrammarTool {
 
-    private final GrammarInterpreter grammarInterpreter;
-    private final ErrorTransformer errorTransformer;
+    private final GrammarCompiler grammarCompiler;
     private final ObjectMapper objectMapper;
 
     public McpSchema.Tool toTool() {
@@ -69,57 +59,18 @@ public class ValidateGrammarTool {
 
             log.info("validate_grammar invoked, grammar size: {} bytes", grammarText.length());
 
-            // Use interpreter instead of compiler for 10-100x performance improvement
-            InterpreterResult interpreterResult = grammarInterpreter.createInterpreter(grammarText);
-            Grammar grammar = interpreterResult.getGrammar();
+            ValidationResult result = grammarCompiler.validate(grammarText);
 
-            // Check for empty grammar (only validation needed since interpreter catches other issues)
-            List<GrammarError> validationErrors = new ArrayList<>();
-            if (grammar.rules.isEmpty() && (grammar.getImplicitLexer() == null || grammar.getImplicitLexer().rules.isEmpty())) {
-                validationErrors.add(GrammarError.builder()
-                    .type("empty_grammar")
-                    .message("Grammar has no rules defined")
-                    .suggestedFix("Add at least one parser or lexer rule to the grammar")
-                    .build());
-            }
-
-            // Count rules based on grammar type
-            int lexerRules;
-            int parserRules;
-            String grammarType = interpreterResult.getGrammarType();
-
-            if ("lexer".equals(grammarType)) {
-                // For lexer grammars, grammar.rules contains lexer rules
-                lexerRules = grammar.rules.size();
-                parserRules = 0;
-            } else {
-                // For parser/combined grammars, grammar.rules contains parser rules
-                parserRules = grammar.rules.size();
-                // Count only explicitly defined lexer rules (not implicit ones from string literals)
-                lexerRules = countExplicitLexerRules(grammarText);
-            }
-
-            boolean success = validationErrors.isEmpty();
-
-            ValidationResult result = ValidationResult.builder()
-                .success(success)
-                .grammarName(interpreterResult.getGrammarName())
-                .grammarType(interpreterResult.getGrammarType())
-                .lexerRules(lexerRules)
-                .parserRules(parserRules)
-                .warnings(interpreterResult.getWarnings())
-                .errors(validationErrors)
-                .build();
-
-            // Check expected name if provided
-            if (expectedName != null && !expectedName.equals(result.getGrammarName())) {
-                result.setSuccess(false);
-                result.getErrors().add(GrammarError.builder()
-                    .type("name_mismatch")
-                    .message(String.format("Expected grammar name '%s' but found '%s'",
-                                          expectedName, result.getGrammarName()))
-                    .suggestedFix("Update grammar declaration to match expected name")
-                    .build());
+            if (expectedName != null && result.isSuccess()) {
+                if (!expectedName.equals(result.getGrammarName())) {
+                    result.setSuccess(false);
+                    result.getErrors().add(com.github.sshailabh.antlr4mcp.model.GrammarError.builder()
+                        .type("name_mismatch")
+                        .message(String.format("Expected grammar name '%s' but found '%s'",
+                                              expectedName, result.getGrammarName()))
+                        .suggestedFix("Update grammar declaration to match expected name")
+                        .build());
+                }
             }
 
             String jsonResult = objectMapper.writeValueAsString(result);
@@ -128,47 +79,15 @@ public class ValidateGrammarTool {
         } catch (Exception e) {
             log.error("validate_grammar failed", e);
             try {
-                // Return ValidationResult with error instead of ErrorResponse
-                // to maintain consistent API
-                ValidationResult errorResult = ValidationResult.builder()
-                    .success(false)
-                    .errors(List.of(GrammarError.builder()
-                        .type("grammar_load_error")
-                        .message(e.getMessage() != null ? e.getMessage() : "Failed to load grammar")
-                        .suggestedFix("Check grammar syntax and structure")
-                        .build()))
-                    .build();
+                ValidationResult errorResult = ValidationResult.error("Tool execution failed: " + e.getMessage());
                 String jsonResult = objectMapper.writeValueAsString(errorResult);
-                return new McpSchema.CallToolResult(jsonResult, false);
+                return new McpSchema.CallToolResult(jsonResult, true);
             } catch (Exception ex) {
-                log.error("Failed to serialize error", ex);
                 return new McpSchema.CallToolResult(
-                    "{\"success\":false,\"errors\":[{\"type\":\"internal_error\",\"message\":\"" +
-                    (ex.getMessage() != null ? ex.getMessage().replace("\"", "\\\"") : "Internal error") + "\"}]}",
+                    "{\"success\":false,\"errors\":[{\"type\":\"internal_error\",\"message\":\"" + ex.getMessage() + "\"}]}",
                     true
                 );
             }
         }
-    }
-
-    /**
-     * Count only explicitly defined lexer rules by parsing grammar text.
-     * This avoids issues with interpreter mode where implicit tokens from string literals
-     * are mixed with explicit lexer rules in the Grammar object.
-     */
-    private int countExplicitLexerRules(String grammarText) {
-        // Pattern matches explicit lexer rule definitions:
-        // - Optional "fragment" keyword
-        // - Uppercase identifier (lexer rules must start with uppercase)
-        // - Followed by colon
-        // Example matches: "NUMBER :", "WS :", "fragment ESC :"
-        Pattern lexerRulePattern = Pattern.compile("^(fragment\\s+)?[A-Z][A-Z0-9_]*\\s*:", Pattern.MULTILINE);
-        Matcher matcher = lexerRulePattern.matcher(grammarText);
-
-        int count = 0;
-        while (matcher.find()) {
-            count++;
-        }
-        return count;
     }
 }

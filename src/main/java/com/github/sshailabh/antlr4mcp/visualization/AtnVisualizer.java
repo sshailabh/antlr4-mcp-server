@@ -2,7 +2,6 @@ package com.github.sshailabh.antlr4mcp.visualization;
 
 import lombok.extern.slf4j.Slf4j;
 import org.antlr.v4.runtime.atn.*;
-import org.antlr.v4.tool.DOTGenerator;
 import org.antlr.v4.tool.Grammar;
 import org.antlr.v4.tool.Rule;
 import org.springframework.stereotype.Component;
@@ -13,38 +12,46 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
- * Visualizes ANTLR ATN (Augmented Transition Network) state machines.
- * Phase 1: Uses ANTLR's built-in DOTGenerator for simpler and more reliable visualization.
+ * Visualizes ANTLR ATN (Augmented Transition Network) state machines
  */
 @Component
 @Slf4j
 public class AtnVisualizer {
 
     /**
-     * Generate ATN visualization for a specific rule using ANTLR's built-in DOTGenerator.
-     * Phase 1: Simplified to use ANTLR's native DOT generation.
+     * Generate ATN visualization for a specific rule
      */
     public AtnVisualization visualize(Grammar grammar, String ruleName) {
-        log.info("Generating ATN visualization for rule: {} using DOTGenerator", ruleName);
+        log.info("Generating ATN visualization for rule: {}", ruleName);
 
-        // Get the rule
+        // Try to get parser rule first
         Rule rule = grammar.getRule(ruleName);
-        if (rule == null) {
+        ATNState startState = null;
+
+        if (rule != null) {
+            // Parser rule
+            startState = grammar.atn.ruleToStartState[rule.index];
+        } else {
+            // Try lexer rule
+            for (Rule r : grammar.rules.values()) {
+                if (r.name.equals(ruleName)) {
+                    startState = grammar.atn.ruleToStartState[r.index];
+                    break;
+                }
+            }
+        }
+
+        if (startState == null) {
             throw new IllegalArgumentException("Rule not found: " + ruleName);
         }
 
-        ATNState startState = grammar.atn.ruleToStartState[rule.index];
-
-        // Build graph for state/transition counts
+        // Build graph
         AtnGraph graph = buildGraph(startState, new HashSet<>());
 
-        // Use ANTLR's built-in DOTGenerator
-        DOTGenerator dotGen = new DOTGenerator(grammar);
-        String dot = dotGen.getDOT(startState, true);  // true = show rule names
-
-        // Phase 1: Generate only DOT format (mermaid and SVG deferred to later phases)
-        String mermaid = null;
-        String svg = null;
+        // Generate visualizations
+        String dot = generateDot(graph, ruleName);
+        String mermaid = generateMermaid(graph, ruleName);
+        String svg = renderSvg(dot);
 
         return AtnVisualization.builder()
             .ruleName(ruleName)
@@ -187,5 +194,101 @@ public class AtnVisualizer {
             return "action";
         }
         return "other";
+    }
+
+    /**
+     * Generate DOT format
+     */
+    private String generateDot(AtnGraph graph, String ruleName) {
+        StringBuilder dot = new StringBuilder();
+        dot.append("digraph ATN_").append(ruleName).append(" {\n");
+        dot.append("  rankdir=LR;\n");
+        dot.append("  node [shape=circle, fontname=\"Arial\", fontsize=10];\n");
+        dot.append("  edge [fontname=\"Arial\", fontsize=9];\n\n");
+
+        // States
+        for (AtnNode node : graph.getStates()) {
+            String shape = node.isAcceptState() ? "doublecircle" : "circle";
+            String color = node.getStateNumber() == graph.getStartState().getStateNumber() ?
+                "fillcolor=lightgreen, style=filled" : "";
+
+            dot.append(String.format("  s%d [label=\"%d\\n%s\", shape=%s, %s];\n",
+                node.getStateNumber(), node.getStateNumber(), node.getLabel(), shape, color));
+        }
+
+        dot.append("\n");
+
+        // Transitions
+        for (AtnEdge edge : graph.getTransitions()) {
+            String color = edge.getType().equals("epsilon") ? "color=gray" :
+                          edge.getType().equals("rule") ? "color=blue" : "";
+
+            dot.append(String.format("  s%d -> s%d [label=\"%s\", %s];\n",
+                edge.getFrom(), edge.getTo(),
+                escapeLabel(edge.getLabel()), color));
+        }
+
+        dot.append("}\n");
+        return dot.toString();
+    }
+
+    /**
+     * Generate Mermaid format
+     */
+    private String generateMermaid(AtnGraph graph, String ruleName) {
+        StringBuilder mermaid = new StringBuilder();
+        mermaid.append("stateDiagram-v2\n");
+        mermaid.append("    [*] --> s").append(graph.getStartState().getStateNumber()).append("\n");
+
+        for (AtnEdge edge : graph.getTransitions()) {
+            String label = edge.getLabel().replace("\"", "");
+            mermaid.append(String.format("    s%d --> s%d: %s\n",
+                edge.getFrom(), edge.getTo(), label));
+        }
+
+        // Mark accept states
+        for (AtnNode node : graph.getStates()) {
+            if (node.isAcceptState()) {
+                mermaid.append("    s").append(node.getStateNumber()).append(" --> [*]\n");
+            }
+        }
+
+        return mermaid.toString();
+    }
+
+    /**
+     * Render DOT to SVG using Graphviz (if available)
+     */
+    private String renderSvg(String dot) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("dot", "-Tsvg");
+            Process process = pb.start();
+
+            try (OutputStream os = process.getOutputStream()) {
+                os.write(dot.getBytes(StandardCharsets.UTF_8));
+            }
+
+            String svg = new String(process.getInputStream().readAllBytes(),
+                                   StandardCharsets.UTF_8);
+
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                log.warn("Graphviz rendering failed with exit code {}", exitCode);
+                return null;
+            }
+
+            return svg;
+        } catch (IOException | InterruptedException e) {
+            log.warn("Graphviz not available or failed to render SVG: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Escape special characters in DOT labels
+     */
+    private String escapeLabel(String label) {
+        return label.replace("\"", "\\\"")
+                    .replace("\n", "\\n");
     }
 }
