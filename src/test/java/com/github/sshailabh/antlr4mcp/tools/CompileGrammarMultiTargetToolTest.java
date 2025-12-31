@@ -45,12 +45,12 @@ class CompileGrammarMultiTargetToolTest extends AbstractToolTest {
     void testToolSchema() {
         McpSchema.Tool schema = tool.toTool();
 
-        assertValidToolSchema(schema, "compile_grammar_multi_target", "grammarText");
+        assertValidToolSchema(schema, "compile_grammar_multi_target", "grammar_text");
         assertTrue(schema.description().toLowerCase().contains("compile"),
             "Description should mention 'compile'");
 
-        // Verify targetLanguage is present (but not required due to default)
-        assertTrue(schema.inputSchema().properties().containsKey("targetLanguage"));
+        // Verify target_language is present (but not required due to default)
+        assertTrue(schema.inputSchema().properties().containsKey("target_language"));
     }
 
     // ========== MULTI-TARGET COMPILATION TESTS ==========
@@ -62,9 +62,9 @@ class CompileGrammarMultiTargetToolTest extends AbstractToolTest {
                                       String targetLanguage, String expectedTargetName) throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("compile_grammar_multi_target", arguments()
-                .with("grammarText", grammar)
-                .with("targetLanguage", targetLanguage)
-                .with("includeGeneratedCode", false)
+                .with("grammar_text", grammar)
+                .with("target_language", targetLanguage)
+                .with("include_generated_code", false)
                 .build()));
 
         assertToolSuccess(result);
@@ -86,9 +86,9 @@ class CompileGrammarMultiTargetToolTest extends AbstractToolTest {
     void testIncludeGeneratedCode() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("compile_grammar_multi_target", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("targetLanguage", "java")
-                .with("includeGeneratedCode", true)
+                .with("grammar_text", SIMPLE_CALC)
+                .with("target_language", "java")
+                .with("include_generated_code", true)
                 .build()));
 
         assertToolSuccess(result);
@@ -115,8 +115,8 @@ class CompileGrammarMultiTargetToolTest extends AbstractToolTest {
     void testExcludeGeneratedCodeByDefault() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("compile_grammar_multi_target", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("targetLanguage", "python3")
+                .with("grammar_text", SIMPLE_CALC)
+                .with("target_language", "python3")
                 .build()));
 
         assertToolSuccess(result);
@@ -140,8 +140,8 @@ class CompileGrammarMultiTargetToolTest extends AbstractToolTest {
     void testRuntimeInfoPython() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("compile_grammar_multi_target", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("targetLanguage", "python3")
+                .with("grammar_text", SIMPLE_CALC)
+                .with("target_language", "python3")
                 .build()));
 
         @SuppressWarnings("unchecked")
@@ -162,8 +162,8 @@ class CompileGrammarMultiTargetToolTest extends AbstractToolTest {
     void testRuntimeInfoJava() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("compile_grammar_multi_target", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("targetLanguage", "java")
+                .with("grammar_text", SIMPLE_CALC)
+                .with("target_language", "java")
                 .build()));
 
         @SuppressWarnings("unchecked")
@@ -187,8 +187,8 @@ class CompileGrammarMultiTargetToolTest extends AbstractToolTest {
                                   String targetLanguage, String expectedErrorPattern) throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("compile_grammar_multi_target", arguments()
-                .with("grammarText", grammar)
-                .with("targetLanguage", targetLanguage)
+                .with("grammar_text", grammar)
+                .with("target_language", targetLanguage)
                 .build()));
 
         // Tool may return error flag OR success:false in response
@@ -211,8 +211,8 @@ class CompileGrammarMultiTargetToolTest extends AbstractToolTest {
     void testComplexLeftRecursiveGrammar() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("compile_grammar_multi_target", arguments()
-                .with("grammarText", PRECEDENCE_CALC)
-                .with("targetLanguage", "java")
+                .with("grammar_text", PRECEDENCE_CALC)
+                .with("target_language", "java")
                 .build()));
 
         assertToolSuccess(result);
@@ -230,9 +230,9 @@ class CompileGrammarMultiTargetToolTest extends AbstractToolTest {
     void testJsonGrammarToJavaScript() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("compile_grammar_multi_target", arguments()
-                .with("grammarText", JSON_INLINE)
-                .with("targetLanguage", "javascript")
-                .with("includeGeneratedCode", false)
+                .with("grammar_text", JSON_INLINE)
+                .with("target_language", "javascript")
+                .with("include_generated_code", false)
                 .build()));
 
         assertToolSuccess(result);
@@ -251,8 +251,8 @@ class CompileGrammarMultiTargetToolTest extends AbstractToolTest {
     void testFileCountSimpleGrammar() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("compile_grammar_multi_target", arguments()
-                .with("grammarText", SIMPLE_HELLO)
-                .with("targetLanguage", "python3")
+                .with("grammar_text", SIMPLE_HELLO)
+                .with("target_language", "python3")
                 .build()));
 
         @SuppressWarnings("unchecked")

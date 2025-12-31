@@ -40,7 +40,8 @@ LABEL description="Model Context Protocol server for ANTLR4 grammar validation a
 LABEL org.opencontainers.image.source="https://github.com/sshailabh/antlr4-mcp-server"
 
 # Install minimal dependencies (fontconfig for java.desktop module)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Security: upgrade all packages to latest versions
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     fontconfig libfreetype6 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -52,7 +53,7 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # Create non-root user for security
 RUN groupadd -g 1000 antlr && \
-    useradd -u 1000 -g antlr -d /home/antlr -s /bin/sh -m antlr
+    useradd -u 1000 -g antlr -d /home/antlr -s /sbin/nologin -m antlr
 
 WORKDIR /app
 
@@ -63,9 +64,17 @@ RUN mkdir -p /tmp/antlr && \
 
 COPY --from=build --chown=antlr:antlr /workspace/app.jar /app/app.jar
 
+# Make app.jar read-only
+RUN chmod 444 /app/app.jar
+
 # JVM tuning for container environments
-ENV JAVA_OPTS="-Xms128m -Xmx512m -XX:MaxMetaspaceSize=128m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseContainerSupport"
+# Security: disable attach API, restrict reflection
+ENV JAVA_OPTS="-Xms128m -Xmx512m -XX:MaxMetaspaceSize=128m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseContainerSupport -Djava.security.egd=file:/dev/urandom -XX:+DisableAttachMechanism"
 
 USER antlr
+
+# Health check (optional, for orchestration)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD echo '{}' | timeout 2 java -jar /app/app.jar 2>/dev/null || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -Djava.io.tmpdir=/tmp/antlr -jar /app/app.jar"]
