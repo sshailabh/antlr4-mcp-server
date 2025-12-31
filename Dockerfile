@@ -51,7 +51,7 @@ ENV JAVA_HOME=/opt/java
 COPY --from=build /javaruntime $JAVA_HOME
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# Create non-root user for security
+# Create non-root user for security (must be done before removing passwd tools)
 RUN groupadd -g 1000 antlr && \
     useradd -u 1000 -g antlr -d /home/antlr -s /sbin/nologin -m antlr
 
@@ -66,6 +66,14 @@ COPY --from=build --chown=antlr:antlr /workspace/app.jar /app/app.jar
 
 # Make app.jar read-only
 RUN chmod 444 /app/app.jar
+
+# Security hardening: Remove package management tools to reduce attack surface
+# This mitigates vulnerabilities in gpgv, apt, dpkg that are not needed at runtime
+RUN rm -rf /var/lib/dpkg /var/lib/apt /var/cache/apt /var/log/apt \
+    && rm -f /usr/bin/apt* /usr/bin/dpkg* /usr/bin/gpg* /usr/bin/gpgv* \
+    && rm -rf /etc/apt /etc/dpkg \
+    && rm -rf /usr/share/doc /usr/share/man /usr/share/info \
+    && find /var/log -type f -delete
 
 # JVM tuning for container environments
 # Security: disable attach API, restrict reflection

@@ -47,13 +47,14 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
 
-        <spring-boot.version>2.7.18</spring-boot.version>
+        <spring-boot.version>3.4.5</spring-boot.version>
+        <spring.version>6.2.11</spring.version>
         <antlr.version>4.13.2</antlr.version>
-        <jackson.version>2.15.3</jackson.version>
+        <jackson.version>2.18.2</jackson.version>
         <caffeine.version>3.1.8</caffeine.version>
         <jgrapht.version>1.5.2</jgrapht.version>
         <batik.version>1.17</batik.version>
-        <commons-io.version>2.15.1</commons-io.version>
+        <commons-io.version>2.18.0</commons-io.version>
 
         <!-- Plugin versions -->
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
@@ -92,6 +93,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Override Spring Core to patched version for CVE-2025-41249 fix -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-core</artifactId>
+            <version>${spring.version}</version>
         </dependency>
 
         <!-- ANTLR4 Runtime -->
