@@ -27,14 +27,23 @@ public class MultiTargetCompiler {
      * Compile grammar for specific target language
      */
     public CompilationResult compileForTarget(String grammarText, TargetLanguage target) {
-        return compileForTarget(grammarText, target, null);
+        return compileForTarget(grammarText, target, null, true, false);
     }
 
     /**
      * Compile grammar for specific target language with grammar name
      */
     public CompilationResult compileForTarget(String grammarText, TargetLanguage target, String grammarName) {
-        log.info("Compiling grammar for target: {}", target.getDisplayName());
+        return compileForTarget(grammarText, target, grammarName, true, false);
+    }
+
+    /**
+     * Compile grammar for specific target language with all options
+     */
+    public CompilationResult compileForTarget(String grammarText, TargetLanguage target, String grammarName,
+                                               boolean generateListener, boolean generateVisitor) {
+        log.info("Compiling grammar for target: {} (listener={}, visitor={})", 
+                 target.getDisplayName(), generateListener, generateVisitor);
 
         Path tempDir = null;
         try {
@@ -52,13 +61,26 @@ public class MultiTargetCompiler {
             Files.writeString(grammarFile, grammarText, StandardCharsets.UTF_8);
             log.debug("Wrote grammar file: {}", grammarFile);
 
+            // Build ANTLR Tool arguments
+            List<String> args = new ArrayList<>();
+            args.add("-Dlanguage=" + target.getAntlrName());
+            args.add("-o");
+            args.add(tempDir.toString());
+            if (generateListener) {
+                args.add("-listener");
+            } else {
+                args.add("-no-listener");
+            }
+            if (generateVisitor) {
+                args.add("-visitor");
+            } else {
+                args.add("-no-visitor");
+            }
+            args.add(grammarFile.toString());
+
             // Compile grammar
             CompilationErrorListener errorListener = new CompilationErrorListener();
-            Tool antlrTool = new Tool(new String[]{
-                "-Dlanguage=" + target.getAntlrName(),
-                "-o", tempDir.toString(),
-                grammarFile.toString()
-            });
+            Tool antlrTool = new Tool(args.toArray(new String[0]));
 
             antlrTool.addListener(errorListener);
             antlrTool.processGrammarsOnCommandLine();

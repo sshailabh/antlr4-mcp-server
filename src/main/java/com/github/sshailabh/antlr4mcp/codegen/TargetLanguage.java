@@ -47,6 +47,11 @@ public enum TargetLanguage {
 
         String normalized = value.trim().toLowerCase();
 
+        // Handle "python" as alias for "python3"
+        if ("python".equals(normalized)) {
+            return PYTHON3;
+        }
+
         for (TargetLanguage target : values()) {
             if (target.displayName.toLowerCase().equals(normalized) ||
                 target.name().toLowerCase().equals(normalized) ||

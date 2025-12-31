@@ -1,6 +1,6 @@
 # ANTLR4 MCP Server - Development Guide
 
-**Version**: 0.2.0 | **Tests**: 240 passing
+**Version**: 0.2.0
 
 ## Prerequisites
 
@@ -27,15 +27,6 @@ antlr4-mcp-server/
 ├── src/main/java/com/github/sshailabh/antlr4mcp/
 │   ├── AntlrMcpServerApplication.java  # Entry point
 │   ├── tools/                          # 9 MCP tool implementations
-│   │   ├── ValidateGrammarTool.java
-│   │   ├── ParseSampleTool.java
-│   │   ├── DetectAmbiguityTool.java
-│   │   ├── AnalyzeLeftRecursionTool.java
-│   │   ├── AnalyzeFirstFollowTool.java
-│   │   ├── AnalyzeCallGraphTool.java
-│   │   ├── VisualizeAtnTool.java
-│   │   ├── CompileGrammarMultiTargetTool.java
-│   │   └── ProfileGrammarTool.java
 │   ├── service/                        # Core services
 │   │   ├── GrammarCompiler.java        # Grammar loading/validation
 │   │   ├── InterpreterParser.java      # Fast parsing (interpreter mode)
@@ -51,7 +42,7 @@ antlr4-mcp-server/
 │   └── config/                         # Spring configuration
 ├── src/main/resources/
 │   └── application.yml                 # Configuration
-├── src/test/java/                      # Test suite (240 tests)
+├── src/test/java/                      # Test suite
 └── src/test/resources/grammars/        # Test grammars
 ```
 
@@ -115,34 +106,6 @@ public static void main(String[] args) {
 3. **No Import Support**: Grammars with `import` are rejected - inline all rules
 4. **9 Tools**: Focused toolset for grammar development
 
-### Tool Implementation Pattern
-
-```java
-@Component
-public class MyTool {
-    private final MyService service;
-    private final ObjectMapper mapper;
-
-    public McpSchema.Tool toTool() {
-        return McpSchema.Tool.builder()
-            .name("my_tool")
-            .description("Tool description")
-            .inputSchema(getInputSchema())
-            .build();
-    }
-
-    private McpSchema.JsonSchema getInputSchema() {
-        Map<String, Object> properties = new HashMap<>();
-        // Define properties...
-        return new McpSchema.JsonSchema("object", properties, required, null, null, null);
-    }
-
-    public McpSchema.CallToolResult execute(McpSyncServerExchange ex, McpSchema.CallToolRequest req) {
-        Map<String, Object> args = (Map<String, Object>) req.arguments();
-        // Process and return JSON result
-    }
-}
-```
 
 ### Service Layer
 
@@ -157,105 +120,6 @@ public class MyTool {
 | `CallGraphAnalyzer` | Rule dependency analysis |
 | `AtnVisualizer` | ATN diagram generation |
 | `MultiTargetCompiler` | Code generation for 10 targets |
-
-## Adding a New Tool
-
-### Step 1: Create Tool Class
-
-```java
-package com.github.sshailabh.antlr4mcp.tools;
-
-@Component
-@RequiredArgsConstructor
-public class MyNewTool {
-    private final MyService service;
-    private final ObjectMapper mapper;
-
-    public McpSchema.Tool toTool() {
-        return McpSchema.Tool.builder()
-            .name("my_new_tool")
-            .description("What this tool does")
-            .inputSchema(getInputSchema())
-            .build();
-    }
-
-    private McpSchema.JsonSchema getInputSchema() {
-        Map<String, Object> properties = new HashMap<>();
-        Map<String, Object> grammarText = new HashMap<>();
-        grammarText.put("type", "string");
-        grammarText.put("description", "ANTLR4 grammar content");
-        properties.put("grammar_text", grammarText);
-
-        return new McpSchema.JsonSchema(
-            "object", properties, List.of("grammar_text"), null, null, null
-        );
-    }
-
-    public McpSchema.CallToolResult execute(McpSyncServerExchange ex, McpSchema.CallToolRequest req) {
-        try {
-            Map<String, Object> args = (Map<String, Object>) req.arguments();
-            String grammarText = (String) args.get("grammar_text");
-
-            MyResult result = service.process(grammarText);
-
-            return new McpSchema.CallToolResult(
-                mapper.writeValueAsString(result), false
-            );
-        } catch (Exception e) {
-            return new McpSchema.CallToolResult(
-                "{\"success\":false,\"error\":\"" + e.getMessage() + "\"}", true
-            );
-        }
-    }
-}
-```
-
-### Step 2: Register in Main Application
-
-```java
-// In AntlrMcpServerApplication.java buildServer()
-var myNewTool = new MyNewTool(context.getBean(MyService.class), mapper);
-
-return McpServer.sync(transport)
-    // ... existing tools ...
-    .toolCall(myNewTool.toTool(), myNewTool::execute)
-    .build();
-```
-
-### Step 3: Write Tests
-
-```java
-class MyNewToolTest {
-    private MyNewTool tool;
-    private ObjectMapper objectMapper;
-    private McpSyncServerExchange mockExchange;
-
-    @BeforeEach
-    void setUp() {
-        MyService service = new MyService(...);
-        objectMapper = new ObjectMapper();
-        tool = new MyNewTool(service, objectMapper);
-        mockExchange = mock(McpSyncServerExchange.class);
-    }
-
-    @Test
-    void testBasicFunctionality() throws Exception {
-        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest(
-            "my_new_tool",
-            Map.of("grammar_text", "grammar Test; start: 'hello';")
-        );
-
-        McpSchema.CallToolResult result = tool.execute(mockExchange, request);
-
-        assertThat(result.isError()).isFalse();
-    }
-}
-```
-
-### Step 4: Update Documentation
-
-- Update tool count in `README.md`, `CLAUDE.md`, `USER_GUIDE.md`
-- Add tool description to `USER_GUIDE.md`
 
 ## Configuration
 
@@ -280,24 +144,21 @@ antlr.mcp:
 
 ## Testing
 
-### Test Categories
-
-| Category | Count | Focus |
-|----------|-------|-------|
-| Tool Tests | ~100 | MCP tool behavior |
-| Service Tests | ~80 | Core logic |
-| Integration Tests | ~40 | End-to-end |
-| Model Tests | ~20 | DTOs |
-
 ### Test MCP Server Manually
 
 ```bash
-# List available tools
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | \
+# MCP handshake (initialize -> notifications/initialized) is required before using tools.
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"cli","version":"0"}}}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | \
   java -jar target/antlr4-mcp-server-0.2.0.jar
 
 # Call a tool
-echo '{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"validate_grammar","arguments":{"grammar_text":"grammar Test; start: ID; ID: [a-z]+;"}}}' | \
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"cli","version":"0"}}}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"validate_grammar","arguments":{"grammar_text":"grammar Test; start: ID; ID: [a-z]+; WS: [ \\t\\r\\n]+ -> skip;"}}}' | \
   java -jar target/antlr4-mcp-server-0.2.0.jar
 ```
 
@@ -319,51 +180,69 @@ grep ERROR logs/antlr4-mcp-server.log
 
 ## Docker
 
+### Image Details
+
+| Metric | Value |
+|--------|-------|
+| **Size** | ~311MB (optimized with jlink) |
+| **Base** | Debian Bookworm Slim |
+| **JRE** | Custom minimal Eclipse Temurin 17 (~56MB) |
+| **Architectures** | linux/amd64, linux/arm64 |
+
 ### Build Image
 
 ```bash
-./docker/build.sh
-# Or: docker build -t antlr4-mcp-server:0.2.0 .
+# Single platform (current machine)
+./docker/build.sh 0.2.0
+
+# Or directly with docker
+docker build -t antlr4-mcp-server:latest .
+```
+
+### Multi-Architecture Build
+
+```bash
+# Build for both amd64 and arm64 (requires pushing to registry)
+./docker/build.sh 0.2.0 --multi-arch --push
 ```
 
 ### Run Container
 
 ```bash
-docker run -i --rm antlr4-mcp-server:0.2.0
+docker run -i --rm antlr4-mcp-server:latest
 ```
 
 ### Test Container
 
 ```bash
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | \
-  docker run -i --rm antlr4-mcp-server:0.2.0
+# Using Python demo (recommended)
+cd ../dsl-starter
+python3 scripts/mcp_all_tools_demo.py --server docker
+
+# Manual MCP test
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"cli","version":"0"}}}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | \
+  docker run -i --rm antlr4-mcp-server:latest
 ```
 
-## Code Quality
+### Docker Optimization
 
-### Before Committing
+The Dockerfile uses jlink to create a minimal custom JRE:
 
-```bash
-# 1. Run all tests
-./mvnw test -q
-
-# 2. Verify build
-./mvnw package -DskipTests
-
-# 3. Test MCP protocol
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | \
-  java -jar target/antlr4-mcp-server-0.2.0.jar 2>/dev/null | head -1
-
-# 4. Clean artifacts
-./mvnw clean
+```dockerfile
+# Create custom minimal JRE
+RUN $JAVA_HOME/bin/jlink \
+    --add-modules java.base,java.logging,java.naming,java.desktop,... \
+    --strip-debug \
+    --no-man-pages \
+    --no-header-files \
+    --compress=2 \
+    --output /javaruntime
 ```
 
-### Coding Standards
-
-- Use Lombok (`@Data`, `@Builder`, `@RequiredArgsConstructor`)
-- Return JSON results using ObjectMapper
-- Handle errors gracefully with structured responses
-- Write tests for all tools and services
+This reduces image size from ~526MB (full JDK) to ~311MB.
 
 ## Troubleshooting
 
@@ -382,4 +261,4 @@ echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | \
 
 ---
 
-**Version**: 0.2.0 | **Last Updated**: November 2025
+**Version**: 0.2.0
