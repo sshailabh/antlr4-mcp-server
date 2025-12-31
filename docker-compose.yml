@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  antlr4-mcp-server:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: antlr4-mcp-server:latest
+    container_name: antlr4-mcp-server
+    stdin_open: true  # Required for stdio JSON-RPC
+    tty: false
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp/antlr:rw,noexec,nosuid,size=256m
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpu_shares: 512
+    # Environment variables can be overridden
+    environment:
+      - JAVA_OPTS=-Xms128m -Xmx512m -XX:MaxMetaspaceSize=128m -XX:+UseG1GC -XX:MaxGCPauseMillis=100
+    # For development/testing, you can mount volumes
+    # volumes:
+    #   - ./logs:/tmp/antlr/logs:rw

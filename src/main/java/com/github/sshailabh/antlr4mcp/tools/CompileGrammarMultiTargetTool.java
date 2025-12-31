@@ -32,28 +32,40 @@ public class CompileGrammarMultiTargetTool {
         Map<String, Object> grammarText = new HashMap<>();
         grammarText.put("type", "string");
         grammarText.put("description", "The ANTLR4 grammar text to compile");
-        properties.put("grammarText", grammarText);
+        properties.put("grammar_text", grammarText);
 
         Map<String, Object> targetLanguage = new HashMap<>();
         targetLanguage.put("type", "string");
         targetLanguage.put("enum", Arrays.asList(
-            "java", "python3", "javascript", "typescript", "cpp",
+            "java", "python", "python3", "javascript", "typescript", "cpp",
             "csharp", "go", "swift", "php", "dart"
         ));
         targetLanguage.put("default", "java");
         targetLanguage.put("description", "Target language for code generation");
-        properties.put("targetLanguage", targetLanguage);
+        properties.put("target_language", targetLanguage);
+
+        Map<String, Object> generateListener = new HashMap<>();
+        generateListener.put("type", "boolean");
+        generateListener.put("default", true);
+        generateListener.put("description", "Generate listener classes");
+        properties.put("generate_listener", generateListener);
+
+        Map<String, Object> generateVisitor = new HashMap<>();
+        generateVisitor.put("type", "boolean");
+        generateVisitor.put("default", false);
+        generateVisitor.put("description", "Generate visitor classes");
+        properties.put("generate_visitor", generateVisitor);
 
         Map<String, Object> includeGeneratedCode = new HashMap<>();
         includeGeneratedCode.put("type", "boolean");
         includeGeneratedCode.put("default", false);
         includeGeneratedCode.put("description", "Include full generated code in response (default: false, only file list)");
-        properties.put("includeGeneratedCode", includeGeneratedCode);
+        properties.put("include_generated_code", includeGeneratedCode);
 
         McpSchema.JsonSchema schema = new McpSchema.JsonSchema(
             "object",
             properties,
-            List.of("grammarText"),
+            List.of("grammar_text"),
             null,
             null,
             null
@@ -73,11 +85,14 @@ public class CompileGrammarMultiTargetTool {
             @SuppressWarnings("unchecked")
             Map<String, Object> arguments = (Map<String, Object>) request.arguments();
 
-            String grammarText = (String) arguments.get("grammarText");
-            String targetLangStr = (String) arguments.getOrDefault("targetLanguage", "java");
-            Boolean includeCode = (Boolean) arguments.getOrDefault("includeGeneratedCode", false);
+            String grammarText = (String) arguments.get("grammar_text");
+            String targetLangStr = (String) arguments.getOrDefault("target_language", "java");
+            Boolean generateListener = (Boolean) arguments.getOrDefault("generate_listener", true);
+            Boolean generateVisitor = (Boolean) arguments.getOrDefault("generate_visitor", false);
+            Boolean includeCode = (Boolean) arguments.getOrDefault("include_generated_code", false);
 
-            log.info("Compiling grammar for target language: {}", targetLangStr);
+            log.info("Compiling grammar for target language: {} (listener={}, visitor={})", 
+                     targetLangStr, generateListener, generateVisitor);
 
             // Parse target language
             TargetLanguage targetLanguage;
@@ -92,7 +107,8 @@ public class CompileGrammarMultiTargetTool {
             }
 
             // Compile grammar
-            CompilationResult result = multiTargetCompiler.compileForTarget(grammarText, targetLanguage);
+            CompilationResult result = multiTargetCompiler.compileForTarget(
+                grammarText, targetLanguage, null, generateListener, generateVisitor);
 
             // Build response
             Map<String, Object> response = new HashMap<>();

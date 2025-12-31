@@ -35,12 +35,12 @@ public class VisualizeAtnTool {
         Map<String, Object> grammarText = new HashMap<>();
         grammarText.put("type", "string");
         grammarText.put("description", "The ANTLR4 grammar text");
-        properties.put("grammarText", grammarText);
+        properties.put("grammar_text", grammarText);
 
         Map<String, Object> ruleName = new HashMap<>();
         ruleName.put("type", "string");
         ruleName.put("description", "Name of the rule to visualize ATN for");
-        properties.put("ruleName", ruleName);
+        properties.put("rule_name", ruleName);
 
         Map<String, Object> format = new HashMap<>();
         format.put("type", "string");
@@ -52,7 +52,7 @@ public class VisualizeAtnTool {
         McpSchema.JsonSchema schema = new McpSchema.JsonSchema(
             "object",
             properties,
-            List.of("grammarText", "ruleName"),
+            List.of("grammar_text", "rule_name"),
             null,
             null,
             null
@@ -72,8 +72,8 @@ public class VisualizeAtnTool {
             @SuppressWarnings("unchecked")
             Map<String, Object> arguments = (Map<String, Object>) request.arguments();
 
-            String grammarText = (String) arguments.get("grammarText");
-            String ruleName = (String) arguments.get("ruleName");
+            String grammarText = (String) arguments.get("grammar_text");
+            String ruleName = (String) arguments.get("rule_name");
             String format = (String) arguments.getOrDefault("format", "all");
 
             log.info("Visualizing ATN for rule: {} in format: {}", ruleName, format);

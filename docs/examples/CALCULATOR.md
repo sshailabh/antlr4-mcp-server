@@ -123,3 +123,30 @@ Found 2 ambiguities:
 - [ ] Decimals: "3.14 + 2.71"
 - [ ] Complex: "((10 + 5) * 2) / 3"
 - [ ] Edge cases: "0", "0.0", "999.999"
+
+---
+
+## Demo Script
+
+Run the Calculator demo to test grammar validation, parsing, ambiguity detection, and code generation:
+
+```bash
+cd dsl-starter
+python3 scripts/mcp_calculator_demo.py --server docker
+```
+
+This will:
+1. Validate the Calculator grammar
+2. Parse a sample expression: "2 + 3 * 4"
+3. Check for ambiguities
+4. Generate Python parser code
+
+Example output:
+```
+[ok] Connected to MCP server, 9 tools available
+[ok] Grammar validation: success=True
+[ok] Parse result: success=True
+Parse tree: (expr (expr 2) + (expr (expr 3) * (expr 4)))
+[ok] Ambiguity check: hasAmbiguities=False
+[ok] Code generation: success=True fileCount=8
+```

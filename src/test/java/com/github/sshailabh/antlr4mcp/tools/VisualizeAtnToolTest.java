@@ -49,7 +49,7 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testToolSchema() {
         McpSchema.Tool schema = tool.toTool();
 
-        assertValidToolSchema(schema, "visualize_atn", "grammarText", "ruleName");
+        assertValidToolSchema(schema, "visualize_atn", "grammar_text", "rule_name");
         assertTrue(schema.description().contains("ATN") || schema.description().contains("network"));
     }
 
@@ -62,8 +62,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
                                    String format, String expectedKey) throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", grammar)
-                .with("ruleName", ruleName)
+                .with("grammar_text", grammar)
+                .with("rule_name", ruleName)
                 .with("format", format)
                 .build()));
 
@@ -84,8 +84,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testDotFormatOnly() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("ruleName", "expr")
+                .with("grammar_text", SIMPLE_CALC)
+                .with("rule_name", "expr")
                 .with("format", "dot")
                 .build()));
 
@@ -104,8 +104,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testMermaidFormatOnly() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("ruleName", "term")
+                .with("grammar_text", SIMPLE_CALC)
+                .with("rule_name", "term")
                 .with("format", "mermaid")
                 .build()));
 
@@ -124,8 +124,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testAllFormats() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", PRECEDENCE_CALC)
-                .with("ruleName", "expr")
+                .with("grammar_text", PRECEDENCE_CALC)
+                .with("rule_name", "expr")
                 .with("format", "all")
                 .build()));
 
@@ -145,8 +145,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testDifferentRules(String ruleName) throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("ruleName", ruleName)
+                .with("grammar_text", SIMPLE_CALC)
+                .with("rule_name", ruleName)
                 .with("format", "dot")
                 .build()));
 
@@ -166,8 +166,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testSimpleGrammar() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", SIMPLE_HELLO)
-                .with("ruleName", "start")
+                .with("grammar_text", SIMPLE_HELLO)
+                .with("rule_name", "start")
                 .with("format", "all")
                 .build()));
 
@@ -184,8 +184,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testComplexGrammar() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", PRECEDENCE_CALC)
-                .with("ruleName", "expr")
+                .with("grammar_text", PRECEDENCE_CALC)
+                .with("rule_name", "expr")
                 .with("format", "all")
                 .build()));
 
@@ -204,8 +204,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testJsonGrammar() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", JSON_INLINE)
-                .with("ruleName", "value")
+                .with("grammar_text", JSON_INLINE)
+                .with("rule_name", "value")
                 .with("format", "dot")
                 .build()));
 
@@ -226,8 +226,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testNonExistentRule() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("ruleName", "nonexistent")
+                .with("grammar_text", SIMPLE_CALC)
+                .with("rule_name", "nonexistent")
                 .build()));
 
         assertTrue(result.isError(), "Should return error for non-existent rule");
@@ -246,8 +246,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testInvalidGrammar() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", UNDEFINED_RULE)
-                .with("ruleName", "start")
+                .with("grammar_text", UNDEFINED_RULE)
+                .with("rule_name", "start")
                 .build()));
 
         assertTrue(result.isError(), "Should return error for invalid grammar");
@@ -264,8 +264,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testEmptyGrammar() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", "")
-                .with("ruleName", "start")
+                .with("grammar_text", "")
+                .with("rule_name", "start")
                 .build()));
 
         assertTrue(result.isError(), "Should return error for empty grammar");
@@ -278,8 +278,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testStateAndTransitionCounts() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("ruleName", "factor")
+                .with("grammar_text", SIMPLE_CALC)
+                .with("rule_name", "factor")
                 .with("format", "dot")
                 .build()));
 
@@ -304,8 +304,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testDotOutputWellFormed() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("ruleName", "expr")
+                .with("grammar_text", SIMPLE_CALC)
+                .with("rule_name", "expr")
                 .with("format", "dot")
                 .build()));
 
@@ -327,8 +327,8 @@ class VisualizeAtnToolTest extends AbstractToolTest {
     void testMermaidOutputWellFormed() throws Exception {
         McpSchema.CallToolResult result = tool.execute(mockExchange,
             createRequest("visualize_atn", arguments()
-                .with("grammarText", SIMPLE_CALC)
-                .with("ruleName", "expr")
+                .with("grammar_text", SIMPLE_CALC)
+                .with("rule_name", "expr")
                 .with("format", "mermaid")
                 .build()));
 
