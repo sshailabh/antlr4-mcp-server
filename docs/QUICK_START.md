@@ -9,7 +9,7 @@ Get the ANTLR4 MCP Server running in under 5 minutes.
 Docker (Recommended)
 
 ```bash
-docker pull sshailabh/antlr4-mcp-server:latest
+docker pull sshailabh1/antlr4-mcp-server:latest
 ```
 
 Or build locally:
@@ -46,7 +46,7 @@ Add to your config file:
   "mcpServers": {
     "antlr4": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "sshailabh/antlr4-mcp-server:latest"]
+      "args": ["run", "-i", "--rm", "sshailabh1/antlr4-mcp-server:latest"]
     }
   }
 }
@@ -79,7 +79,7 @@ Add to `.cursor/mcp.json` in your project:
   "mcpServers": {
     "antlr4": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "sshailabh/antlr4-mcp-server:latest"]
+      "args": ["run", "-i", "--rm", "sshailabh1/antlr4-mcp-server:latest"]
     }
   }
 }
@@ -112,7 +112,7 @@ Add to your Continue configuration:
     {
       "name": "antlr4",
       "command": "docker",
-      "args": ["run", "-i", "--rm", "sshailabh/antlr4-mcp-server:latest"]
+      "args": ["run", "-i", "--rm", "sshailabh1/antlr4-mcp-server:latest"]
     }
   ]
 }

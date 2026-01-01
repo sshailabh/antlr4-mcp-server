@@ -13,7 +13,7 @@ MCP server enabling AI assistants to help with ANTLR4 grammar development.
 ### Docker (Recommended)
 
 ```bash
-docker pull sshailabh/antlr4-mcp-server:latest
+docker pull sshailabh1/antlr4-mcp-server:latest
 ```
 
 Configure your MCP client:
@@ -23,7 +23,7 @@ Configure your MCP client:
   "mcpServers": {
     "antlr4": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "sshailabh/antlr4-mcp-server:latest"]
+      "args": ["run", "-i", "--rm", "sshailabh1/antlr4-mcp-server:latest"]
     }
   }
 }
